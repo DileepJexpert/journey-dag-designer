@@ -1,0 +1,19 @@
+# Dart/Flutter tooling
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec.lock  # app (not a published package); regenerate with `flutter pub get`
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+
+# NOTE: generated *.freezed.dart / *.g.dart ARE committed so the repo builds and
+# tests without a codegen pass. Regenerate with:
+#   dart run build_runner build --delete-conflicting-outputs
