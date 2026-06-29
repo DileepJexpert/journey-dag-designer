@@ -1,0 +1,102 @@
+{
+  "key": "payment-execution",
+  "startNodeId": "n_validate",
+  "nodes": [
+    {
+      "type": "task",
+      "id": "n_validate",
+      "capabilityKey": "payments",
+      "next": [
+        "n_route"
+      ]
+    },
+    {
+      "type": "branch",
+      "id": "n_route",
+      "arms": [
+        {
+          "expression": "rail == 'IMPS'",
+          "next": "n_imps"
+        },
+        {
+          "expression": "rail == 'UPI_MANDATE'",
+          "next": "n_mandate"
+        },
+        {
+          "expression": "rail == 'BILL_PAY'",
+          "next": "n_bill"
+        }
+      ]
+    },
+    {
+      "type": "task",
+      "id": "n_imps",
+      "capabilityKey": "payments",
+      "next": [
+        "n_confirm"
+      ]
+    },
+    {
+      "type": "task",
+      "id": "n_mandate",
+      "capabilityKey": "payments",
+      "next": [
+        "n_confirm"
+      ]
+    },
+    {
+      "type": "task",
+      "id": "n_bill",
+      "capabilityKey": "payments",
+      "next": [
+        "n_confirm"
+      ]
+    },
+    {
+      "type": "task",
+      "id": "n_confirm",
+      "capabilityKey": "payments",
+      "next": [
+        "n_notify"
+      ]
+    },
+    {
+      "type": "terminal",
+      "id": "n_notify",
+      "action": "notify_channel",
+      "emit": [
+        "PaymentExecuted"
+      ]
+    }
+  ],
+  "layout": {
+    "n_validate": {
+      "x": 80.0,
+      "y": 220.0
+    },
+    "n_route": {
+      "x": 280.0,
+      "y": 220.0
+    },
+    "n_imps": {
+      "x": 500.0,
+      "y": 100.0
+    },
+    "n_mandate": {
+      "x": 500.0,
+      "y": 220.0
+    },
+    "n_bill": {
+      "x": 500.0,
+      "y": 340.0
+    },
+    "n_confirm": {
+      "x": 720.0,
+      "y": 220.0
+    },
+    "n_notify": {
+      "x": 920.0,
+      "y": 220.0
+    }
+  }
+}

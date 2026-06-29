@@ -16,6 +16,9 @@ class MockJourneyRepository implements JourneyRepository {
     final ts = now ?? DateTime.fromMillisecondsSinceEpoch(0);
     final loan = seedLoanJourney(ts);
     _journeys[loan.id] = loan;
+    // The payments journey — third channel, shown as config (config-not-code).
+    final payment = seedPaymentJourney(ts);
+    _journeys[payment.id] = payment;
   }
 
   final DagValidator _validator;

@@ -23,15 +23,30 @@ const contractKey = 'loan-origination';
 /// Path of the committed contract fixture, relative to the repo root.
 const contractPath = 'contract/loan-origination.journey.json';
 
-/// The exact bytes (string) of the contract: serializer output + trailing LF.
+/// The payments showcase journey (third channel; shown as config, not run live).
+const paymentContractKey = 'payment-execution';
+const paymentContractPath = 'contract/payment-execution.journey.json';
+
+/// The exact bytes (string) of the loan contract: serializer output + trailing LF.
 String contractContents() {
   const serializer = ConfigSerializer();
   return '${serializer.toJsonString(seedLoanDag(), key: contractKey)}\n';
 }
 
+/// The exact bytes (string) of the payment contract.
+String paymentContractContents() {
+  const serializer = ConfigSerializer();
+  return '${serializer.toJsonString(seedPaymentDag(), key: paymentContractKey)}\n';
+}
+
 void main() {
-  final file = File(contractPath);
+  _write(contractPath, contractContents());
+  _write(paymentContractPath, paymentContractContents());
+}
+
+void _write(String path, String contents) {
+  final file = File(path);
   file.parent.createSync(recursive: true);
-  file.writeAsStringSync(contractContents());
-  stdout.writeln('Wrote $contractPath');
+  file.writeAsStringSync(contents);
+  stdout.writeln('Wrote $path');
 }
