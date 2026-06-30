@@ -55,6 +55,17 @@ const seedCapabilities = <Capability>[
       name: 'Payments',
       domain: 'Payments',
       operations: ['validate', 'executeImps', 'executeMandate', 'executeBillPay', 'confirm']),
+  Capability(
+      key: 'mandate',
+      name: 'Mandate (e-mandate lifecycle)',
+      domain: 'Payments',
+      operations: [
+        'register',
+        'verifyEnach',
+        'setupAutopayLink',
+        'cancel',
+        'handleVendorCallback',
+      ]),
   Capability(key: 'echo', name: 'Echo (framework demo)', operations: ['echo']),
 ];
 
