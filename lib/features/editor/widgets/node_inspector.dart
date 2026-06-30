@@ -92,15 +92,41 @@ class NodeInspector extends ConsumerWidget {
             v == null ? null : c.replaceNode(n.copyWith(capability: v)),
       ),
       const SizedBox(height: 12),
-      _TextField(
-        nodeId: n.id,
-        field: 'operation',
-        label: 'Operation (e.g. resolve, verify, book)',
-        initial: n.operation ?? '',
-        enabled: editable,
-        onChanged: (v) =>
-            c.replaceNode(n.copyWith(operation: v.isEmpty ? null : v)),
-      ),
+      // Operation: a dropdown of the capability's registered operations (BRD §2);
+      // free text if the capability declares none, so unknowns stay authorable.
+      ...(() {
+        final ops = state.capabilities
+            .where((x) => x.key == n.capability)
+            .expand((x) => x.operations)
+            .toList();
+        if (ops.isEmpty) {
+          return [
+            _TextField(
+              nodeId: n.id,
+              field: 'operation',
+              label: 'Operation',
+              initial: n.operation ?? '',
+              enabled: editable,
+              onChanged: (v) =>
+                  c.replaceNode(n.copyWith(operation: v.isEmpty ? null : v)),
+            ),
+          ];
+        }
+        final items = {for (final o in ops) o: o};
+        if (n.operation != null && !items.containsKey(n.operation)) {
+          items[n.operation!] = '${n.operation} (custom)';
+        }
+        return [
+          _DropdownField(
+            label: 'Operation',
+            value: n.operation,
+            items: items,
+            enabled: editable,
+            allowEmpty: true,
+            onChanged: (v) => c.replaceNode(n.copyWith(operation: v)),
+          ),
+        ];
+      })(),
       const SizedBox(height: 12),
       _TextField(
         nodeId: n.id,

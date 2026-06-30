@@ -33,6 +33,11 @@ class Capability with _$Capability {
     String? domain,
     @Default(<CapabilityPort>[]) List<CapabilityPort> ports,
 
+    /// The operations this capability exposes (Charter §7 task `operation`, BRD
+    /// §2). The editor offers these in the task inspector so a maker picks a real
+    /// operation; mirrors the backend capability's CapabilityOperation set.
+    @Default(<String>[]) List<String> operations,
+
     /// Money/booking nodes (e.g. lending-origination) MUST declare a
     /// compensation in any DAG that uses them — enforced by [DagValidator].
     @Default(false) bool isMoneyOrBookingNode,

@@ -20,18 +20,42 @@ import '../domain/models/scope_dimensions.dart';
 /// Registered capabilities — keys == backend module names. Money/booking nodes
 /// flagged so the validator can enforce compensation (§9.6).
 const seedCapabilities = <Capability>[
-  Capability(key: 'customer-party', name: 'Customer / Party', domain: 'Customer'),
-  Capability(key: 'kyc', name: 'KYC', domain: 'KYC'),
-  Capability(key: 'bureau', name: 'Bureau', domain: 'Lending'),
-  Capability(key: 'scoring', name: 'Scoring / Decisioning', domain: 'Lending'),
+  Capability(
+      key: 'customer-party',
+      name: 'Customer / Party',
+      domain: 'Customer',
+      operations: ['resolve']),
+  Capability(key: 'kyc', name: 'KYC', domain: 'KYC', operations: ['verify']),
+  Capability(key: 'bureau', name: 'Bureau', domain: 'Lending', operations: ['pull']),
+  Capability(
+      key: 'scoring',
+      name: 'Scoring / Decisioning',
+      domain: 'Lending',
+      operations: ['decide']),
   Capability(
       key: 'lending-origination',
       name: 'Lending Origination (booking)',
       domain: 'Lending',
-      isMoneyOrBookingNode: true),
+      isMoneyOrBookingNode: true,
+      // hosts the brand device-financing validation adapter (BRD §5)
+      operations: ['book', 'reverseBooking', 'validateDeviceFinancing']),
   Capability(
-      key: 'lending-servicing', name: 'Lending Servicing', domain: 'Lending'),
-  Capability(key: 'payments', name: 'Payments', domain: 'Payments'),
+      key: 'lending-servicing',
+      name: 'Lending Servicing',
+      domain: 'Lending',
+      operations: [
+        'processMaturedLoan',
+        'processClosedLoan',
+        'processExcessAmount',
+        'batchClosure',
+        'getMaruti',
+      ]),
+  Capability(
+      key: 'payments',
+      name: 'Payments',
+      domain: 'Payments',
+      operations: ['validate', 'executeImps', 'executeMandate', 'executeBillPay', 'confirm']),
+  Capability(key: 'echo', name: 'Echo (framework demo)', operations: ['echo']),
 ];
 
 /// businessLine codes == the SFDC edge `type` values.

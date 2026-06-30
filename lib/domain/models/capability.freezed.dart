@@ -172,6 +172,11 @@ mixin _$Capability {
   String? get domain => throw _privateConstructorUsedError;
   List<CapabilityPort> get ports => throw _privateConstructorUsedError;
 
+  /// The operations this capability exposes (Charter §7 task `operation`, BRD
+  /// §2). The editor offers these in the task inspector so a maker picks a real
+  /// operation; mirrors the backend capability's CapabilityOperation set.
+  List<String> get operations => throw _privateConstructorUsedError;
+
   /// Money/booking nodes (e.g. lending-origination) MUST declare a
   /// compensation in any DAG that uses them — enforced by [DagValidator].
   bool get isMoneyOrBookingNode => throw _privateConstructorUsedError;
@@ -194,6 +199,7 @@ abstract class $CapabilityCopyWith<$Res> {
       String name,
       String? domain,
       List<CapabilityPort> ports,
+      List<String> operations,
       bool isMoneyOrBookingNode});
 }
 
@@ -216,6 +222,7 @@ class _$CapabilityCopyWithImpl<$Res, $Val extends Capability>
     Object? name = null,
     Object? domain = freezed,
     Object? ports = null,
+    Object? operations = null,
     Object? isMoneyOrBookingNode = null,
   }) {
     return _then(_value.copyWith(
@@ -235,6 +242,10 @@ class _$CapabilityCopyWithImpl<$Res, $Val extends Capability>
           ? _value.ports
           : ports // ignore: cast_nullable_to_non_nullable
               as List<CapabilityPort>,
+      operations: null == operations
+          ? _value.operations
+          : operations // ignore: cast_nullable_to_non_nullable
+              as List<String>,
       isMoneyOrBookingNode: null == isMoneyOrBookingNode
           ? _value.isMoneyOrBookingNode
           : isMoneyOrBookingNode // ignore: cast_nullable_to_non_nullable
@@ -256,6 +267,7 @@ abstract class _$$CapabilityImplCopyWith<$Res>
       String name,
       String? domain,
       List<CapabilityPort> ports,
+      List<String> operations,
       bool isMoneyOrBookingNode});
 }
 
@@ -276,6 +288,7 @@ class __$$CapabilityImplCopyWithImpl<$Res>
     Object? name = null,
     Object? domain = freezed,
     Object? ports = null,
+    Object? operations = null,
     Object? isMoneyOrBookingNode = null,
   }) {
     return _then(_$CapabilityImpl(
@@ -295,6 +308,10 @@ class __$$CapabilityImplCopyWithImpl<$Res>
           ? _value._ports
           : ports // ignore: cast_nullable_to_non_nullable
               as List<CapabilityPort>,
+      operations: null == operations
+          ? _value._operations
+          : operations // ignore: cast_nullable_to_non_nullable
+              as List<String>,
       isMoneyOrBookingNode: null == isMoneyOrBookingNode
           ? _value.isMoneyOrBookingNode
           : isMoneyOrBookingNode // ignore: cast_nullable_to_non_nullable
@@ -311,8 +328,10 @@ class _$CapabilityImpl extends _Capability {
       required this.name,
       this.domain,
       final List<CapabilityPort> ports = const <CapabilityPort>[],
+      final List<String> operations = const <String>[],
       this.isMoneyOrBookingNode = false})
       : _ports = ports,
+        _operations = operations,
         super._();
 
   @override
@@ -333,6 +352,22 @@ class _$CapabilityImpl extends _Capability {
     return EqualUnmodifiableListView(_ports);
   }
 
+  /// The operations this capability exposes (Charter §7 task `operation`, BRD
+  /// §2). The editor offers these in the task inspector so a maker picks a real
+  /// operation; mirrors the backend capability's CapabilityOperation set.
+  final List<String> _operations;
+
+  /// The operations this capability exposes (Charter §7 task `operation`, BRD
+  /// §2). The editor offers these in the task inspector so a maker picks a real
+  /// operation; mirrors the backend capability's CapabilityOperation set.
+  @override
+  @JsonKey()
+  List<String> get operations {
+    if (_operations is EqualUnmodifiableListView) return _operations;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableListView(_operations);
+  }
+
   /// Money/booking nodes (e.g. lending-origination) MUST declare a
   /// compensation in any DAG that uses them — enforced by [DagValidator].
   @override
@@ -341,7 +376,7 @@ class _$CapabilityImpl extends _Capability {
 
   @override
   String toString() {
-    return 'Capability(key: $key, name: $name, domain: $domain, ports: $ports, isMoneyOrBookingNode: $isMoneyOrBookingNode)';
+    return 'Capability(key: $key, name: $name, domain: $domain, ports: $ports, operations: $operations, isMoneyOrBookingNode: $isMoneyOrBookingNode)';
   }
 
   @override
@@ -353,13 +388,21 @@ class _$CapabilityImpl extends _Capability {
             (identical(other.name, name) || other.name == name) &&
             (identical(other.domain, domain) || other.domain == domain) &&
             const DeepCollectionEquality().equals(other._ports, _ports) &&
+            const DeepCollectionEquality()
+                .equals(other._operations, _operations) &&
             (identical(other.isMoneyOrBookingNode, isMoneyOrBookingNode) ||
                 other.isMoneyOrBookingNode == isMoneyOrBookingNode));
   }
 
   @override
-  int get hashCode => Object.hash(runtimeType, key, name, domain,
-      const DeepCollectionEquality().hash(_ports), isMoneyOrBookingNode);
+  int get hashCode => Object.hash(
+      runtimeType,
+      key,
+      name,
+      domain,
+      const DeepCollectionEquality().hash(_ports),
+      const DeepCollectionEquality().hash(_operations),
+      isMoneyOrBookingNode);
 
   /// Create a copy of Capability
   /// with the given fields replaced by the non-null parameter values.
@@ -376,6 +419,7 @@ abstract class _Capability extends Capability {
       required final String name,
       final String? domain,
       final List<CapabilityPort> ports,
+      final List<String> operations,
       final bool isMoneyOrBookingNode}) = _$CapabilityImpl;
   const _Capability._() : super._();
 
@@ -390,6 +434,12 @@ abstract class _Capability extends Capability {
   String? get domain;
   @override
   List<CapabilityPort> get ports;
+
+  /// The operations this capability exposes (Charter §7 task `operation`, BRD
+  /// §2). The editor offers these in the task inspector so a maker picks a real
+  /// operation; mirrors the backend capability's CapabilityOperation set.
+  @override
+  List<String> get operations;
 
   /// Money/booking nodes (e.g. lending-origination) MUST declare a
   /// compensation in any DAG that uses them — enforced by [DagValidator].
