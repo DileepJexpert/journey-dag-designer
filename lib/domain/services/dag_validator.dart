@@ -80,6 +80,19 @@ class DagValidator {
           ));
         }
       }
+      // A declared compensation must resolve to a real node — otherwise the
+      // engine has nothing to run on failure (the saga edge is dangling).
+      if (n is TaskNode &&
+          n.compensation != null &&
+          !byId.containsKey(n.compensation)) {
+        issues.add(ValidationIssue(
+          code: ValidationCode.danglingEdge,
+          severity: ValidationSeverity.error,
+          message:
+              'Node "${n.id}" declares compensation "${n.compensation}", which does not exist.',
+          nodeId: n.id,
+        ));
+      }
     }
 
     // Predecessor map (only over edges whose endpoints both exist).
@@ -206,6 +219,13 @@ class DagValidator {
       if (node == null) continue;
       for (final s in node.successors) {
         if (byId.containsKey(s)) stack.add(s);
+      }
+      // A compensation node is reachable via the saga edge, so it is NOT
+      // unreachable just because no `next`/arm points at it.
+      if (node is TaskNode &&
+          node.compensation != null &&
+          byId.containsKey(node.compensation)) {
+        stack.add(node.compensation!);
       }
     }
     return visited;

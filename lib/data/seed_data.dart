@@ -85,6 +85,10 @@ Dag seedLoanDag() => const Dag(
             id: 'n_reject',
             action: 'push_decision_to_channel',
             emit: ['LoanRejected']),
+        // Saga compensation for the booking node: if FinnOne booking fails, the
+        // engine runs this to reverse it. Reachable only via n_book.compensation.
+        DagNode.terminal(
+            id: 'n_reverse', action: 'reverse_booking', emit: ['BookingReversed']),
       ],
       layout: {
         'n_customer': NodeLayout(x: 80, y: 200),
@@ -95,6 +99,7 @@ Dag seedLoanDag() => const Dag(
         'n_book': NodeLayout(x: 980, y: 120),
         'n_done': NodeLayout(x: 1160, y: 120),
         'n_reject': NodeLayout(x: 980, y: 300),
+        'n_reverse': NodeLayout(x: 1160, y: 300),
       },
     );
 

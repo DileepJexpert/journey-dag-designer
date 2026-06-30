@@ -118,6 +118,31 @@ void main() {
     expect(codes(dag), contains(ValidationCode.missingCompensation));
   });
 
+  test('compensation pointing at a missing node -> danglingEdge', () {
+    const dag = Dag(startNodeId: 'a', nodes: [
+      DagNode.task(
+        id: 'a',
+        capabilityKey: 'lending-origination',
+        compensation: 'ghost', // not defined anywhere
+        next: ['b'],
+      ),
+      DagNode.terminal(id: 'b'),
+    ]);
+    final result = validator.validate(dag, capabilities: loanCapabilities);
+    expect(result.issues.map((i) => i.code), contains(ValidationCode.danglingEdge));
+    // ...and the dangling compensation must not also read as unreachable noise.
+    expect(result.invalidNodeIds, contains('a'));
+  });
+
+  test('a compensation terminal is reachable via the saga edge (not unreachable)',
+      () {
+    // n_reverse is only reachable through n_book.compensation; the canonical DAG
+    // must still validate clean (no unreachableNode for it).
+    final result =
+        validator.validate(canonicalLoanDag(), capabilities: loanCapabilities);
+    expect(result.errors, isEmpty, reason: result.errors.toString());
+  });
+
   test('unregistered capability -> unknownCapability', () {
     const dag = Dag(startNodeId: 'a', nodes: [
       DagNode.task(id: 'a', capabilityKey: 'scoring-decisioning', next: ['b']),

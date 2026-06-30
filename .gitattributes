@@ -1,0 +1,13 @@
+# Normalize line endings to LF on checkout for ALL platforms. The committed DAG
+# contract fixtures (contract/*.journey.json) are asserted byte-for-byte against
+# the LF output of ConfigSerializer; a CRLF checkout on Windows would fail those
+# tests (contract_lock_test, payments_showcase_test). Force LF.
+* text=auto eol=lf
+
+# The contract fixtures in particular MUST stay LF.
+*.json text eol=lf
+*.dart text eol=lf
+
+# Binaries — never touch.
+*.png binary
+*.ico binary

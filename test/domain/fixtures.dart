@@ -27,8 +27,8 @@ final loanCapabilities = <Capability>[
 /// The §5 reference journey, exactly as documented:
 /// customer -> kyc -> bureau -> scoring -> decide(branch) -> book | reject;
 /// book -> done. `n_book` is metered + money-booking and declares a
-/// compensation (the compensation target lives outside the drawn graph, as in
-/// the §5 example itself). This DAG is fully valid.
+/// compensation `n_reverse` — a terminal reachable only via the saga edge. This
+/// DAG is fully valid.
 Dag canonicalLoanDag() => const Dag(
       startNodeId: 'n_customer',
       nodes: [
@@ -54,6 +54,10 @@ Dag canonicalLoanDag() => const Dag(
             id: 'n_reject',
             action: 'push_decision_to_channel',
             emit: ['LoanRejected']),
+        DagNode.terminal(
+            id: 'n_reverse',
+            action: 'reverse_booking',
+            emit: ['BookingReversed']),
       ],
       layout: {
         'n_customer': NodeLayout(x: 80, y: 200),
