@@ -26,13 +26,13 @@ void main() {
     final route = dag.nodeOrNull('n_route')!;
     final exprs = serializer.toJson(dag, key: 'payment-execution')['nodes']
         .firstWhere((n) => n['id'] == 'n_route')['arms']
-        .map((a) => a['expression'])
+        .map((a) => a['when'])
         .toList();
     expect(route, isNotNull);
     expect(exprs, containsAll([
-      "rail == 'IMPS'",
-      "rail == 'UPI_MANDATE'",
-      "rail == 'BILL_PAY'",
+      "context.request.rail == 'IMPS'",
+      "context.request.rail == 'UPI_MANDATE'",
+      "context.request.rail == 'BILL_PAY'",
     ]));
   });
 

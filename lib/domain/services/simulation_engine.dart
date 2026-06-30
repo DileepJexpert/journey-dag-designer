@@ -67,13 +67,15 @@ class SimulationEngine {
       var stepHasMeter = false;
       for (final n in ready) {
         fired.add(n.id);
-        if (n is TaskNode && n.meter != null) stepHasMeter = true;
+        if (n is TaskNode && n.policies?.meter != null) stepHasMeter = true;
 
-        // Inject failure: record compensation chain, halt this node's forward edges.
+        // Inject failure: record the compensation (saga undo) and halt this
+        // node's forward edges. Compensation is an operation on the same
+        // capability (§4), so we record the failed node as compensated.
         if (!failed && input.failAt != null && n.id == input.failAt) {
           failed = true;
           if (n is TaskNode && n.compensation != null) {
-            _collectCompensation(n.compensation!, byId, compensated);
+            compensated.add(n.id);
           }
           continue;
         }
@@ -94,38 +96,32 @@ class SimulationEngine {
   }
 
   /// The edges that actually carry the token out of [node] given the run input.
+  /// A `branch` picks one arm (the chosen one, else the first, else default); a
+  /// `human` picks one outcome; everything else fans out its forward edges. This
+  /// is a PREVIEW — it models structure/order, not real evaluation.
   List<String> _activeSuccessors(
       DagNode node, SimulationInput input, Map<String, DagNode> byId) {
     return switch (node) {
       TaskNode(:final next) => next,
-      BranchNode(:final id, :final arms) => () {
-          if (arms.isEmpty) return const <String>[];
+      BranchNode(:final id, :final arms, :final defaultNext) => () {
           final chosen = input.branchChoices[id];
-          if (chosen != null && arms.any((a) => a.next == chosen)) {
-            return <String>[chosen];
-          }
-          return <String>[arms.first.next];
+          if (chosen != null) return <String>[chosen];
+          if (arms.isNotEmpty) return <String>[arms.first.next];
+          if (defaultNext != null) return <String>[defaultNext];
+          return const <String>[];
         }(),
+      ParallelNode(:final branches) => branches,
+      JoinNode(:final next) => next,
+      WaitNode(:final next) => next, // preview: assume the event arrives
+      TimerNode(:final next) => next,
+      HumanNode(:final id, :final outcomes) => () {
+          final chosen = input.branchChoices[id];
+          if (chosen != null) return <String>[chosen];
+          return outcomes.isEmpty ? const <String>[] : <String>[outcomes.first.next];
+        }(),
+      ForeachNode(:final body, :final next) => [...body, ...next],
+      SubjourneyNode(:final next) => next,
       TerminalNode() => const <String>[],
     };
-  }
-
-  /// Walk a compensation chain to its terminal, recording each node once.
-  void _collectCompensation(
-      String start, Map<String, DagNode> byId, List<String> out) {
-    final visited = <String>{};
-    var current = start;
-    while (byId.containsKey(current) && visited.add(current)) {
-      out.add(current);
-      final node = byId[current]!;
-      final succ = switch (node) {
-        TaskNode(:final compensation, :final next) =>
-          compensation ?? (next.isNotEmpty ? next.first : null),
-        BranchNode(:final arms) => arms.isNotEmpty ? arms.first.next : null,
-        TerminalNode() => null,
-      };
-      if (succ == null) break;
-      current = succ;
-    }
   }
 }

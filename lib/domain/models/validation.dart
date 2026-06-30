@@ -20,9 +20,11 @@ enum ValidationCode {
   cycleDetected,
   danglingEdge,
   branchArmDeadEnd,
+  branchNoDefault, // §9.5: every branch needs a `default`
   joinOnUnknownPredecessor,
   joinOnNotActualPredecessor,
   missingCompensation,
+  waitMissingTimeout, // §9.7: every wait needs timeout + onTimeout
   unknownCapability,
   duplicateNodeId,
   emptyDag,

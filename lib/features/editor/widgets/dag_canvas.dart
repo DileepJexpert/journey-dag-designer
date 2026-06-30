@@ -172,12 +172,19 @@ class _DagCanvasState extends ConsumerState<DagCanvas> {
   }
 
   String _labelFor(DagNode node, EditorState state) => switch (node) {
-        TaskNode(:final capabilityKey) => state.capabilities
-            .where((c) => c.key == capabilityKey)
+        TaskNode(:final capability) => state.capabilities
+            .where((c) => c.key == capability)
             .map((c) => c.name)
             .cast<String?>()
-            .firstWhere((_) => true, orElse: () => capabilityKey)!,
+            .firstWhere((_) => true, orElse: () => capability)!,
         BranchNode(:final arms) => 'Branch · ${arms.length} arm(s)',
+        ParallelNode(:final branches) => 'Parallel · ${branches.length}',
+        JoinNode(:final policy) => 'Join · ${policy.name}',
+        WaitNode(:final waitFor) => 'Wait · $waitFor',
+        TimerNode() => 'Timer',
+        HumanNode(:final assignTo) => 'Human · ${assignTo ?? "?"}',
+        ForeachNode() => 'Foreach',
+        SubjourneyNode(:final journeyKey) => 'Sub · $journeyKey',
         TerminalNode(:final action) => action ?? 'End',
       };
 }
@@ -216,7 +223,9 @@ class _PositionedNode extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final accent = switch (node) {
       TaskNode() => StatusColors.pending,
-      BranchNode() => StatusColors.draft,
+      BranchNode() || ParallelNode() || JoinNode() => StatusColors.draft,
+      WaitNode() || TimerNode() || HumanNode() => const Color(0xFF8A63D2),
+      ForeachNode() || SubjourneyNode() => const Color(0xFF1F9E8F),
       TerminalNode() => StatusColors.published,
     };
     final borderColor = hasError
@@ -325,17 +334,22 @@ class _EdgePainter extends CustomPainter {
       final isSel = selected == node.id;
 
       switch (node) {
-        case TaskNode(:final next):
-          for (final t in next) {
+        case BranchNode(:final arms, :final defaultNext):
+          for (final a in arms) {
+            _edge(canvas, start, a.next, isSel, label: a.when, dashed: true);
+          }
+          if (defaultNext != null) {
+            _edge(canvas, start, defaultNext, isSel,
+                label: 'default', dashed: true);
+          }
+        case HumanNode(:final outcomes):
+          for (final o in outcomes) {
+            _edge(canvas, start, o.next, isSel, label: o.value, dashed: true);
+          }
+        default:
+          for (final t in node.successors) {
             _edge(canvas, start, t, isSel, label: null, dashed: false);
           }
-        case BranchNode(:final arms):
-          for (final a in arms) {
-            _edge(canvas, start, a.next, isSel,
-                label: a.expression, dashed: true);
-          }
-        case TerminalNode():
-          break;
       }
     }
   }

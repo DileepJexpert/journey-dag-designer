@@ -1,4 +1,4 @@
-/// Shared test fixtures: the canonical loan-origination DAG from build doc §5
+/// Shared test fixtures: the canonical loan-origination DAG in the §7 DSL shape
 /// and the capability registry it references (real backend module names).
 library;
 
@@ -7,11 +7,11 @@ import 'package:journey_dag_designer/domain/models/capability.dart';
 import 'package:journey_dag_designer/domain/models/dag.dart';
 import 'package:journey_dag_designer/domain/models/dag_node.dart';
 import 'package:journey_dag_designer/domain/models/node_layout.dart';
+import 'package:journey_dag_designer/domain/models/node_policies.dart';
 
-/// Capability registry keyed by the REAL backend module names
-/// (capabilities/ in idfc-integration-platform). Note: scoring is `scoring`
-/// (NOT "scoring-decisioning"), and the booking capability is
-/// `lending-origination` (money/booking => requires compensation).
+/// Capability registry keyed by the REAL backend module names. `scoring` (not
+/// "scoring-decisioning"); `lending-origination` is money/booking => requires
+/// compensation.
 final loanCapabilities = <Capability>[
   const Capability(key: 'customer-party', name: 'Customer / Party'),
   const Capability(key: 'kyc', name: 'KYC'),
@@ -24,40 +24,61 @@ final loanCapabilities = <Capability>[
   ),
 ];
 
-/// The §5 reference journey, exactly as documented:
-/// customer -> kyc -> bureau -> scoring -> decide(branch) -> book | reject;
-/// book -> done. `n_book` is metered + money-booking and declares a
-/// compensation `n_reverse` — a terminal reachable only via the saga edge. This
-/// DAG is fully valid.
+/// The §7 reference journey: customer -> kyc -> bureau -> scoring ->
+/// decide(branch, with default) -> book | reject. `n_book` is metered + money,
+/// so it declares a compensation operation (saga). Fully valid.
 Dag canonicalLoanDag() => const Dag(
       startNodeId: 'n_customer',
+      contextSchemaRef: 'loan-origination-context@1',
+      pools: {'finnone_pool': PoolSpec(maxConcurrent: 20)},
       nodes: [
         DagNode.task(
-            id: 'n_customer', capabilityKey: 'customer-party', next: ['n_kyc']),
-        DagNode.task(id: 'n_kyc', capabilityKey: 'kyc', next: ['n_bureau']),
-        DagNode.task(id: 'n_bureau', capabilityKey: 'bureau', next: ['n_score']),
-        DagNode.task(id: 'n_score', capabilityKey: 'scoring', next: ['n_decide']),
+            id: 'n_customer',
+            capability: 'customer-party',
+            operation: 'resolve',
+            output: 'context.customer',
+            next: ['n_kyc']),
+        DagNode.task(
+            id: 'n_kyc',
+            capability: 'kyc',
+            operation: 'verify',
+            output: 'context.kyc',
+            next: ['n_bureau']),
+        DagNode.task(
+            id: 'n_bureau',
+            capability: 'bureau',
+            operation: 'pull',
+            output: 'context.bureau',
+            next: ['n_score']),
+        DagNode.task(
+            id: 'n_score',
+            capability: 'scoring',
+            operation: 'decide',
+            output: 'context.scoring',
+            next: ['n_decide']),
         DagNode.branch(id: 'n_decide', arms: [
-          BranchArm(expression: "decision == 'APPROVED'", next: 'n_book'),
-          BranchArm(expression: "decision == 'REJECTED'", next: 'n_reject'),
-        ]),
+          BranchArm(
+              when: "context.scoring.decision == 'APPROVED'", next: 'n_book'),
+        ], defaultNext: 'n_reject'),
         DagNode.task(
           id: 'n_book',
-          capabilityKey: 'lending-origination',
-          meter: 'finnone_pool',
-          compensation: 'n_reverse',
+          capability: 'lending-origination',
+          operation: 'book',
+          output: 'context.loan',
+          policies: NodePolicies(meter: MeterPolicy(pool: 'finnone_pool')),
+          compensation: Compensation(operation: 'reverseBooking'),
+          onFailure: 'compensate',
           next: ['n_done'],
         ),
         DagNode.terminal(
-            id: 'n_done', action: 'push_decision_to_channel', emit: ['LoanBooked']),
+            id: 'n_done',
+            action: 'push_decision_to_channel',
+            emit: ['LoanBooked']),
         DagNode.terminal(
             id: 'n_reject',
+            status: TerminalStatus.rejected,
             action: 'push_decision_to_channel',
             emit: ['LoanRejected']),
-        DagNode.terminal(
-            id: 'n_reverse',
-            action: 'reverse_booking',
-            emit: ['BookingReversed']),
       ],
       layout: {
         'n_customer': NodeLayout(x: 80, y: 200),

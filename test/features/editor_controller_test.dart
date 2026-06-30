@@ -46,15 +46,21 @@ void main() {
     // The forked draft carries the loan DAG and validates clean.
     expect(state.validation.isValid, isTrue);
 
-    // Author a new node from the palette and wire an edge into it.
+    // Authoring a dangling node makes the draft invalid (dead-end path) and
+    // blocks Submit — the validation gate works.
     controller.addTask('kyc');
     final newId = container.read(provider).selectedNodeId!;
     controller.connect('n_score', newId);
     state = container.read(provider);
     expect(state.dag.nodeOrNull(newId), isNotNull);
     expect(state.dirty, isTrue);
+    expect(state.validation.isValid, isFalse);
+    await controller.submit();
+    expect(container.read(provider).version?.status, ApprovalStatus.draft);
 
-    // Submit the (still valid) draft -> pendingApproval.
+    // Remove the dangling node -> valid again -> Submit advances to pending.
+    controller.deleteNode(newId);
+    expect(container.read(provider).validation.isValid, isTrue);
     await controller.submit();
     state = await _settled(container, provider);
     expect(state.version?.status, ApprovalStatus.pendingApproval);

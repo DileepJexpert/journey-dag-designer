@@ -1,72 +1,94 @@
 {
-  "key": "payment-execution",
+  "journeyKey": "payment-execution",
+  "version": 1,
+  "context": {
+    "schemaRef": "payment-execution-context@1"
+  },
   "startNodeId": "n_validate",
   "nodes": [
     {
-      "type": "task",
       "id": "n_validate",
-      "capabilityKey": "payments",
+      "type": "task",
+      "capability": "payments",
+      "operation": "validate",
+      "output": "context.validation",
       "next": [
         "n_route"
       ]
     },
     {
-      "type": "branch",
       "id": "n_route",
+      "type": "branch",
       "arms": [
         {
-          "expression": "rail == 'IMPS'",
+          "when": "context.request.rail == 'IMPS'",
           "next": "n_imps"
         },
         {
-          "expression": "rail == 'UPI_MANDATE'",
+          "when": "context.request.rail == 'UPI_MANDATE'",
           "next": "n_mandate"
         },
         {
-          "expression": "rail == 'BILL_PAY'",
+          "when": "context.request.rail == 'BILL_PAY'",
           "next": "n_bill"
         }
-      ]
+      ],
+      "default": "n_unsupported"
     },
     {
-      "type": "task",
       "id": "n_imps",
-      "capabilityKey": "payments",
+      "type": "task",
+      "capability": "payments",
+      "operation": "executeImps",
       "next": [
         "n_confirm"
       ]
     },
     {
-      "type": "task",
       "id": "n_mandate",
-      "capabilityKey": "payments",
+      "type": "task",
+      "capability": "payments",
+      "operation": "executeMandate",
       "next": [
         "n_confirm"
       ]
     },
     {
-      "type": "task",
       "id": "n_bill",
-      "capabilityKey": "payments",
+      "type": "task",
+      "capability": "payments",
+      "operation": "executeBillPay",
       "next": [
         "n_confirm"
       ]
     },
     {
-      "type": "task",
       "id": "n_confirm",
-      "capabilityKey": "payments",
+      "type": "task",
+      "capability": "payments",
+      "operation": "confirm",
+      "output": "context.confirmation",
       "next": [
         "n_notify"
       ]
     },
     {
-      "type": "terminal",
       "id": "n_notify",
+      "type": "terminal",
       "action": "notify_channel",
       "emit": [
         "PaymentExecuted"
-      ]
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "n_unsupported",
+      "type": "terminal",
+      "action": "notify_channel",
+      "emit": [
+        "PaymentRailUnsupported"
+      ],
+      "status": "rejected"
     }
   ],
   "layout": {
@@ -97,6 +119,10 @@
     "n_notify": {
       "x": 920.0,
       "y": 220.0
+    },
+    "n_unsupported": {
+      "x": 500.0,
+      "y": 460.0
     }
   }
 }

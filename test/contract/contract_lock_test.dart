@@ -35,7 +35,7 @@ void main() {
 
   test('contract carries the real backend capability keys (not the doc typo)', () {
     final raw = file.readAsStringSync();
-    expect(raw, contains('"capabilityKey": "scoring"'));
+    expect(raw, contains('"capability": "scoring"'));
     expect(raw, isNot(contains('scoring-decisioning')));
     for (final key in const [
       'customer-party',
@@ -44,7 +44,7 @@ void main() {
       'scoring',
       'lending-origination',
     ]) {
-      expect(raw, contains('"capabilityKey": "$key"'), reason: key);
+      expect(raw, contains('"capability": "$key"'), reason: key);
     }
   });
 }

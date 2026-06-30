@@ -1,12 +1,11 @@
-/// Seed data for the mock backend (build doc §9 — "MockJourneyRepository
-/// in-memory, seeded"). Lets the app run end-to-end before the registry backend
-/// exists.
+/// Seed data for the mock backend (Charter §1, §7). Lets the app run end-to-end
+/// before the registry backend exists.
 ///
 /// IMPORTANT (frontend<->backend alignment): capability keys mirror the REAL
 /// backend module names under `idfc-integration-platform/capabilities/`:
 /// bureau, customer-party, kyc, lending-origination, lending-servicing,
-/// payments, scoring. The build doc §5 example used "scoring-decisioning" —
-/// that is NOT a real module; the correct key is "scoring".
+/// payments, scoring. These journeys are authored in the §7 DSL shape (the
+/// canonical contract the engine loads).
 library;
 
 import '../domain/models/branch_arm.dart';
@@ -15,11 +14,11 @@ import '../domain/models/dag.dart';
 import '../domain/models/dag_node.dart';
 import '../domain/models/journey.dart';
 import '../domain/models/node_layout.dart';
+import '../domain/models/node_policies.dart';
 import '../domain/models/scope_dimensions.dart';
 
-/// Registered capabilities — keys == backend module names (ownership domain set
-/// where known). Money/booking nodes flagged so the validator can enforce
-/// compensation.
+/// Registered capabilities — keys == backend module names. Money/booking nodes
+/// flagged so the validator can enforce compensation (§9.6).
 const seedCapabilities = <Capability>[
   Capability(key: 'customer-party', name: 'Customer / Party', domain: 'Customer'),
   Capability(key: 'kyc', name: 'KYC', domain: 'KYC'),
@@ -32,9 +31,6 @@ const seedCapabilities = <Capability>[
       isMoneyOrBookingNode: true),
   Capability(
       key: 'lending-servicing', name: 'Lending Servicing', domain: 'Lending'),
-  // Payments is a ROUTER over rail adapters (IMPS/BillDesk/Montran); IDFC owns no
-  // money-movement SoR in this layer, so the capability node itself is not a
-  // booking node (the rail settles). Reversal/compensation is a later refinement.
   Capability(key: 'payments', name: 'Payments', domain: 'Payments'),
 ];
 
@@ -59,36 +55,63 @@ const seedPartners = <Partner>[
   Partner(code: 'ASIRVAD', label: 'Asirvad'),
 ];
 
-/// The §5 loan-origination DAG (with real capability keys).
+/// The loan-origination journey in the §7 DSL shape: capability+operation tasks,
+/// a branch with a mandatory default, and a metered booking node with a
+/// compensation operation (saga). Topology kept linear so the engine's full-flow
+/// choreography runs it unchanged.
 Dag seedLoanDag() => const Dag(
       startNodeId: 'n_customer',
+      contextSchemaRef: 'loan-origination-context@1',
+      pools: {'finnone_pool': PoolSpec(maxConcurrent: 20)},
       nodes: [
         DagNode.task(
-            id: 'n_customer', capabilityKey: 'customer-party', next: ['n_kyc']),
-        DagNode.task(id: 'n_kyc', capabilityKey: 'kyc', next: ['n_bureau']),
-        DagNode.task(id: 'n_bureau', capabilityKey: 'bureau', next: ['n_score']),
-        DagNode.task(id: 'n_score', capabilityKey: 'scoring', next: ['n_decide']),
+            id: 'n_customer',
+            capability: 'customer-party',
+            operation: 'resolve',
+            output: 'context.customer',
+            next: ['n_kyc']),
+        DagNode.task(
+            id: 'n_kyc',
+            capability: 'kyc',
+            operation: 'verify',
+            output: 'context.kyc',
+            next: ['n_bureau']),
+        DagNode.task(
+            id: 'n_bureau',
+            capability: 'bureau',
+            operation: 'pull',
+            output: 'context.bureau',
+            next: ['n_score']),
+        DagNode.task(
+            id: 'n_score',
+            capability: 'scoring',
+            operation: 'decide',
+            output: 'context.scoring',
+            next: ['n_decide']),
         DagNode.branch(id: 'n_decide', arms: [
-          BranchArm(expression: "decision == 'APPROVED'", next: 'n_book'),
-          BranchArm(expression: "decision == 'REJECTED'", next: 'n_reject'),
-        ]),
+          BranchArm(
+              when: "context.scoring.decision == 'APPROVED'", next: 'n_book'),
+        ], defaultNext: 'n_reject'),
         DagNode.task(
           id: 'n_book',
-          capabilityKey: 'lending-origination',
-          meter: 'finnone_pool',
-          compensation: 'n_reverse',
+          capability: 'lending-origination',
+          operation: 'book',
+          output: 'context.loan',
+          policies: NodePolicies(meter: MeterPolicy(pool: 'finnone_pool')),
+          compensation: Compensation(
+              operation: 'reverseBooking', input: '{ loanId: context.loan.id }'),
+          onFailure: 'compensate',
           next: ['n_done'],
         ),
         DagNode.terminal(
-            id: 'n_done', action: 'push_decision_to_channel', emit: ['LoanBooked']),
+            id: 'n_done',
+            action: 'push_decision_to_channel',
+            emit: ['LoanBooked']),
         DagNode.terminal(
             id: 'n_reject',
+            status: TerminalStatus.rejected,
             action: 'push_decision_to_channel',
             emit: ['LoanRejected']),
-        // Saga compensation for the booking node: if FinnOne booking fails, the
-        // engine runs this to reverse it. Reachable only via n_book.compensation.
-        DagNode.terminal(
-            id: 'n_reverse', action: 'reverse_booking', emit: ['BookingReversed']),
       ],
       layout: {
         'n_customer': NodeLayout(x: 80, y: 200),
@@ -99,7 +122,6 @@ Dag seedLoanDag() => const Dag(
         'n_book': NodeLayout(x: 980, y: 120),
         'n_done': NodeLayout(x: 1160, y: 120),
         'n_reject': NodeLayout(x: 980, y: 300),
-        'n_reverse': NodeLayout(x: 1160, y: 300),
       },
     );
 
@@ -117,34 +139,58 @@ Journey seedLoanJourney(DateTime now) => Journey(
           authorId: 'maker-1',
           approverId: 'checker-1',
           updatedAt: now,
-          note: 'Initial published journey',
+          note: 'Initial published journey (§7 DSL)',
         ),
       ],
       activeVersion: 1,
     );
 
-/// The payment-execution journey — the THIRD channel shown as config-not-code
-/// (DEMO_PAYMENTS_CONFIG_SHOWCASE): validate -> [branch: rail?] ->
-/// execute (IMPS | UPI-mandate | bill-pay) -> confirm -> notify. Same engine,
-/// same Designer; the rails are adapter choices inside the payments capability.
+/// The payment-execution journey (third channel) in §7 shape: validate ->
+/// branch(rail, with default) -> execute(IMPS|UPI|bill) -> confirm -> notify.
 Dag seedPaymentDag() => const Dag(
       startNodeId: 'n_validate',
+      contextSchemaRef: 'payment-execution-context@1',
       nodes: [
         DagNode.task(
-            id: 'n_validate', capabilityKey: 'payments', next: ['n_route']),
+            id: 'n_validate',
+            capability: 'payments',
+            operation: 'validate',
+            output: 'context.validation',
+            next: ['n_route']),
         DagNode.branch(id: 'n_route', arms: [
-          BranchArm(expression: "rail == 'IMPS'", next: 'n_imps'),
-          BranchArm(expression: "rail == 'UPI_MANDATE'", next: 'n_mandate'),
-          BranchArm(expression: "rail == 'BILL_PAY'", next: 'n_bill'),
-        ]),
-        DagNode.task(id: 'n_imps', capabilityKey: 'payments', next: ['n_confirm']),
+          BranchArm(when: "context.request.rail == 'IMPS'", next: 'n_imps'),
+          BranchArm(
+              when: "context.request.rail == 'UPI_MANDATE'", next: 'n_mandate'),
+          BranchArm(when: "context.request.rail == 'BILL_PAY'", next: 'n_bill'),
+        ], defaultNext: 'n_unsupported'),
         DagNode.task(
-            id: 'n_mandate', capabilityKey: 'payments', next: ['n_confirm']),
-        DagNode.task(id: 'n_bill', capabilityKey: 'payments', next: ['n_confirm']),
+            id: 'n_imps',
+            capability: 'payments',
+            operation: 'executeImps',
+            next: ['n_confirm']),
         DagNode.task(
-            id: 'n_confirm', capabilityKey: 'payments', next: ['n_notify']),
+            id: 'n_mandate',
+            capability: 'payments',
+            operation: 'executeMandate',
+            next: ['n_confirm']),
+        DagNode.task(
+            id: 'n_bill',
+            capability: 'payments',
+            operation: 'executeBillPay',
+            next: ['n_confirm']),
+        DagNode.task(
+            id: 'n_confirm',
+            capability: 'payments',
+            operation: 'confirm',
+            output: 'context.confirmation',
+            next: ['n_notify']),
         DagNode.terminal(
             id: 'n_notify', action: 'notify_channel', emit: ['PaymentExecuted']),
+        DagNode.terminal(
+            id: 'n_unsupported',
+            status: TerminalStatus.rejected,
+            action: 'notify_channel',
+            emit: ['PaymentRailUnsupported']),
       ],
       layout: {
         'n_validate': NodeLayout(x: 80, y: 220),
@@ -154,6 +200,7 @@ Dag seedPaymentDag() => const Dag(
         'n_bill': NodeLayout(x: 500, y: 340),
         'n_confirm': NodeLayout(x: 720, y: 220),
         'n_notify': NodeLayout(x: 920, y: 220),
+        'n_unsupported': NodeLayout(x: 500, y: 460),
       },
     );
 

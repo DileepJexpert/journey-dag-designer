@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/models/branch_arm.dart';
 import '../../../domain/models/dag_node.dart';
+import '../../../domain/models/node_policies.dart';
 import '../editor_controller.dart';
 
 class NodeInspector extends ConsumerWidget {
@@ -64,6 +65,7 @@ class NodeInspector extends ConsumerWidget {
           BranchNode() =>
             _branchForm(context, controller, node, otherIds, editable),
           TerminalNode() => _terminalForm(context, controller, node, editable),
+          _ => _genericForm(context, controller, node, otherIds, editable),
         },
         const Divider(height: 24),
         if (editable)
@@ -83,11 +85,31 @@ class NodeInspector extends ConsumerWidget {
     return [
       _DropdownField(
         label: 'Capability',
-        value: n.capabilityKey,
+        value: n.capability,
         items: {for (final cap in state.capabilities) cap.key: cap.name},
         enabled: editable,
         onChanged: (v) =>
-            v == null ? null : c.replaceNode(n.copyWith(capabilityKey: v)),
+            v == null ? null : c.replaceNode(n.copyWith(capability: v)),
+      ),
+      const SizedBox(height: 12),
+      _TextField(
+        nodeId: n.id,
+        field: 'operation',
+        label: 'Operation (e.g. resolve, verify, book)',
+        initial: n.operation ?? '',
+        enabled: editable,
+        onChanged: (v) =>
+            c.replaceNode(n.copyWith(operation: v.isEmpty ? null : v)),
+      ),
+      const SizedBox(height: 12),
+      _TextField(
+        nodeId: n.id,
+        field: 'output',
+        label: 'Output (context key, e.g. context.customer)',
+        initial: n.output ?? '',
+        enabled: editable,
+        onChanged: (v) =>
+            c.replaceNode(n.copyWith(output: v.isEmpty ? null : v)),
       ),
       const SizedBox(height: 12),
       _EdgeEditor(
@@ -99,42 +121,53 @@ class NodeInspector extends ConsumerWidget {
         onRemove: (t) => c.disconnect(n.id, t),
       ),
       const SizedBox(height: 12),
-      _EdgeEditor(
-        label: 'Join on (wait for these predecessors)',
-        targets: n.joinOn,
-        candidates: otherIds,
+      _TextField(
+        nodeId: n.id,
+        field: 'condition',
+        label: 'Condition (expr; runs only if true)',
+        initial: n.condition ?? '',
         enabled: editable,
-        onAdd: (t) => c.replaceNode(n.copyWith(joinOn: [...n.joinOn, t])),
-        onRemove: (t) => c.replaceNode(
-            n.copyWith(joinOn: n.joinOn.where((e) => e != t).toList())),
+        onChanged: (v) =>
+            c.replaceNode(n.copyWith(condition: v.isEmpty ? null : v)),
+      ),
+      const SizedBox(height: 12),
+      _TextField(
+        nodeId: n.id,
+        field: 'onFailure',
+        label: 'onFailure (node id | compensate | dlq | fail)',
+        initial: n.onFailure ?? '',
+        enabled: editable,
+        onChanged: (v) =>
+            c.replaceNode(n.copyWith(onFailure: v.isEmpty ? null : v)),
       ),
       const SizedBox(height: 12),
       _TextField(
         nodeId: n.id,
         field: 'meter',
-        label: 'Meter (backpressure pool, optional)',
-        initial: n.meter ?? '',
+        label: 'Meter pool (backpressure, optional)',
+        initial: n.policies?.meter?.pool ?? '',
         enabled: editable,
-        onChanged: (v) =>
-            c.replaceNode(n.copyWith(meter: v.isEmpty ? null : v)),
+        onChanged: (v) => c.replaceNode(n.copyWith(
+            policies: (n.policies ?? const NodePolicies()).copyWith(
+                meter: v.isEmpty ? null : MeterPolicy(pool: v)))),
       ),
       const SizedBox(height: 12),
-      _DropdownField(
-        label: 'Compensation node (saga rollback)',
-        value: n.compensation,
-        items: {for (final id in otherIds) id: id},
+      _TextField(
+        nodeId: n.id,
+        field: 'compensation',
+        label: 'Compensation operation (saga undo, optional)',
+        initial: n.compensation?.operation ?? '',
         enabled: editable,
-        allowEmpty: true,
-        onChanged: (v) => c.replaceNode(n.copyWith(compensation: v)),
+        onChanged: (v) => c.replaceNode(n.copyWith(
+            compensation: v.isEmpty ? null : Compensation(operation: v))),
       ),
       const SizedBox(height: 4),
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
         title: const Text('Optional (failure does not abort the journey)'),
         value: n.optional,
-        onChanged: editable
-            ? (v) => c.replaceNode(n.copyWith(optional: v))
-            : null,
+        onChanged:
+            editable ? (v) => c.replaceNode(n.copyWith(optional: v)) : null,
       ),
     ];
   }
@@ -156,7 +189,7 @@ class NodeInspector extends ConsumerWidget {
           enabled: editable,
           onExpression: (expr) {
             final arms = [...n.arms];
-            arms[i] = arms[i].copyWith(expression: expr);
+            arms[i] = arms[i].copyWith(when: expr);
             c.replaceNode(n.copyWith(arms: arms));
           },
           onTarget: (t) {
@@ -176,22 +209,20 @@ class NodeInspector extends ConsumerWidget {
             onPressed: () => c.replaceNode(n.copyWith(arms: [
               ...n.arms,
               BranchArm(
-                  expression: 'true',
-                  next: otherIds.isEmpty ? '' : otherIds.first),
+                  when: 'true', next: otherIds.isEmpty ? '' : otherIds.first),
             ])),
             icon: const Icon(Icons.add, size: 18),
             label: const Text('Add arm'),
           ),
         ),
       const SizedBox(height: 12),
-      _EdgeEditor(
-        label: 'Join on',
-        targets: n.joinOn,
-        candidates: otherIds,
+      _DropdownField(
+        label: 'Default (mandatory — total coverage)',
+        value: n.defaultNext,
+        items: {for (final id in otherIds) id: id},
         enabled: editable,
-        onAdd: (t) => c.replaceNode(n.copyWith(joinOn: [...n.joinOn, t])),
-        onRemove: (t) => c.replaceNode(
-            n.copyWith(joinOn: n.joinOn.where((e) => e != t).toList())),
+        allowEmpty: true,
+        onChanged: (v) => c.replaceNode(n.copyWith(defaultNext: v)),
       ),
     ];
   }
@@ -200,6 +231,19 @@ class NodeInspector extends ConsumerWidget {
   List<Widget> _terminalForm(
       BuildContext context, EditorController c, TerminalNode n, bool editable) {
     return [
+      _DropdownField(
+        label: 'Status',
+        value: n.status.name,
+        items: const {
+          'completed': 'completed',
+          'rejected': 'rejected',
+          'failed': 'failed',
+        },
+        enabled: editable,
+        onChanged: (v) => c.replaceNode(n.copyWith(
+            status: TerminalStatus.values.firstWhere((s) => s.name == v))),
+      ),
+      const SizedBox(height: 12),
       _TextField(
         nodeId: n.id,
         field: 'action',
@@ -219,11 +263,97 @@ class NodeInspector extends ConsumerWidget {
     ];
   }
 
-  String _typeName(DagNode n) => switch (n) {
-        TaskNode() => 'Task',
-        BranchNode() => 'Branch',
-        TerminalNode() => 'Terminal',
-      };
+  // ---- Generic (parallel/join/wait/timer/human/foreach/subjourney) ---------
+  // Authorable via key text fields + the forward-edge editor (which routes
+  // through connect/disconnect for every node kind). Rich per-type panels are a
+  // follow-up; the §7 schema is fully expressible today.
+  List<Widget> _genericForm(BuildContext context, EditorController c,
+      DagNode node, List<String> otherIds, bool editable) {
+    final fields = <Widget>[];
+
+    void edges(String label, List<String> targets) {
+      fields.add(_EdgeEditor(
+        label: label,
+        targets: targets,
+        candidates: otherIds,
+        enabled: editable,
+        onAdd: (t) => c.connect(node.id, t),
+        onRemove: (t) => c.disconnect(node.id, t),
+      ));
+      fields.add(const SizedBox(height: 12));
+    }
+
+    void text(String field, String label, String? initial,
+        DagNode Function(String) apply) {
+      fields.add(_TextField(
+        nodeId: node.id,
+        field: field,
+        label: label,
+        initial: initial ?? '',
+        enabled: editable,
+        onChanged: (v) => c.replaceNode(apply(v)),
+      ));
+      fields.add(const SizedBox(height: 12));
+    }
+
+    switch (node) {
+      case ParallelNode():
+        edges('Branches (run concurrently)', node.branches);
+      case JoinNode():
+        fields.add(_DropdownField(
+          label: 'Policy',
+          value: node.policy.name,
+          items: const {'allOf': 'allOf', 'anyOf': 'anyOf', 'quorum': 'quorum'},
+          enabled: editable,
+          onChanged: (v) => c.replaceNode(node.copyWith(
+              policy:
+                  JoinPolicy.values.firstWhere((p) => p.name == v))),
+        ));
+        fields.add(const SizedBox(height: 12));
+        edges('Join on (predecessors)', node.joinOn);
+        edges('Next', node.next);
+      case WaitNode():
+        text('waitFor', 'Wait for (event name)', node.waitFor,
+            (v) => node.copyWith(waitFor: v));
+        text('correlation', 'Correlation (expr)', node.correlation,
+            (v) => node.copyWith(correlation: v.isEmpty ? null : v));
+        text('timeout', 'Timeout (e.g. 24h) — required', node.timeout,
+            (v) => node.copyWith(timeout: v.isEmpty ? null : v));
+        text('onTimeout', 'onTimeout (node id) — required', node.onTimeout,
+            (v) => node.copyWith(onTimeout: v.isEmpty ? null : v));
+        edges('Next (on event)', node.next);
+      case TimerNode():
+        text('delay', 'Delay (e.g. 2h)', node.delay,
+            (v) => node.copyWith(delay: v.isEmpty ? null : v));
+        text('at', 'At (cron)', node.at,
+            (v) => node.copyWith(at: v.isEmpty ? null : v));
+        edges('Next', node.next);
+      case HumanNode():
+        text('assignTo', 'Assign to (role)', node.assignTo,
+            (v) => node.copyWith(assignTo: v.isEmpty ? null : v));
+        text('form', 'Form id', node.form,
+            (v) => node.copyWith(form: v.isEmpty ? null : v));
+        fields.add(Text('Outcomes: ${node.outcomes.map((o) => o.value).join(", ")}',
+            style: Theme.of(context).textTheme.bodySmall));
+        fields.add(const SizedBox(height: 8));
+        edges('Outcome targets', node.outcomes.map((o) => o.next).toList());
+      case ForeachNode():
+        text('items', 'Items (expr -> collection)', node.items,
+            (v) => node.copyWith(items: v));
+        edges('Body (subgraph entry)', node.body);
+        edges('Next', node.next);
+      case SubjourneyNode():
+        text('journeyKey', 'Journey key', node.journeyKey,
+            (v) => node.copyWith(journeyKey: v));
+        edges('Next', node.next);
+      default:
+        break;
+    }
+    return fields;
+  }
+
+  String _typeName(DagNode n) =>
+      n.typeName[0].toUpperCase() + n.typeName.substring(1);
 }
 
 class _Hint extends StatelessWidget {
@@ -484,7 +614,7 @@ class _ArmRow extends StatefulWidget {
 
 class _ArmRowState extends State<_ArmRow> {
   late final TextEditingController _expr =
-      TextEditingController(text: widget.arm.expression);
+      TextEditingController(text: widget.arm.when);
 
   @override
   void dispose() {

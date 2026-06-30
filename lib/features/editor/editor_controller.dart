@@ -165,25 +165,55 @@ class EditorController extends StateNotifier<EditorState> {
   // Structural edits (guarded by isEditable)
   // ---------------------------------------------------------------------------
 
-  void addTask(String capabilityKey) {
+  void addTask(String capability) {
     if (!state.isEditable) return;
-    final id = _freshId('n');
-    final node = DagNode.task(id: id, capabilityKey: capabilityKey);
-    _addNode(node);
+    _addNode(DagNode.task(id: _freshId('task'), capability: capability));
   }
 
   void addBranch() {
     if (!state.isEditable) return;
-    final id = _freshId('br');
-    final node = DagNode.branch(id: id, arms: const []);
-    _addNode(node);
+    _addNode(DagNode.branch(id: _freshId('branch'), arms: const []));
+  }
+
+  void addParallel() {
+    if (!state.isEditable) return;
+    _addNode(DagNode.parallel(id: _freshId('parallel')));
+  }
+
+  void addJoin() {
+    if (!state.isEditable) return;
+    _addNode(DagNode.join(id: _freshId('join')));
+  }
+
+  void addWait() {
+    if (!state.isEditable) return;
+    _addNode(DagNode.wait(id: _freshId('wait'), waitFor: 'Event'));
+  }
+
+  void addTimer() {
+    if (!state.isEditable) return;
+    _addNode(DagNode.timer(id: _freshId('timer'), delay: '2h'));
+  }
+
+  void addHuman() {
+    if (!state.isEditable) return;
+    _addNode(DagNode.human(id: _freshId('human')));
+  }
+
+  void addForeach() {
+    if (!state.isEditable) return;
+    _addNode(DagNode.foreach(id: _freshId('foreach'), items: 'context.items'));
+  }
+
+  void addSubjourney() {
+    if (!state.isEditable) return;
+    _addNode(
+        DagNode.subjourney(id: _freshId('sub'), journeyKey: 'sub-journey'));
   }
 
   void addTerminal() {
     if (!state.isEditable) return;
-    final id = _freshId('end');
-    final node = DagNode.terminal(id: id);
-    _addNode(node);
+    _addNode(DagNode.terminal(id: _freshId('end')));
   }
 
   void _addNode(DagNode node) {
@@ -219,8 +249,8 @@ class EditorController extends StateNotifier<EditorState> {
     _commit(state.dag.copyWith(startNodeId: nodeId));
   }
 
-  /// Add a directed edge from -> to. Task: appends to `next`. Branch: adds a new
-  /// arm (default expression) targeting `to`. Terminal: no outgoing edges.
+  /// Add a directed forward edge from -> to, per node kind (branch adds an arm,
+  /// parallel a branch, human an outcome, terminal nothing).
   void connect(String fromId, String toId) {
     if (!state.isEditable || fromId == toId) return;
     final from = state.dag.nodeOrNull(fromId);
@@ -231,8 +261,31 @@ class EditorController extends StateNotifier<EditorState> {
           : from.copyWith(next: [...from.next, toId]),
       BranchNode() => from.arms.any((a) => a.next == toId)
           ? from
-          : from.copyWith(
-              arms: [...from.arms, BranchArm(expression: 'true', next: toId)]),
+          : from.copyWith(arms: [...from.arms, BranchArm(when: 'true', next: toId)]),
+      ParallelNode() => from.branches.contains(toId)
+          ? from
+          : from.copyWith(branches: [...from.branches, toId]),
+      JoinNode() => from.next.contains(toId)
+          ? from
+          : from.copyWith(next: [...from.next, toId]),
+      WaitNode() => from.next.contains(toId)
+          ? from
+          : from.copyWith(next: [...from.next, toId]),
+      TimerNode() => from.next.contains(toId)
+          ? from
+          : from.copyWith(next: [...from.next, toId]),
+      HumanNode() => from.outcomes.any((o) => o.next == toId)
+          ? from
+          : from.copyWith(outcomes: [
+              ...from.outcomes,
+              HumanOutcome(value: 'outcome${from.outcomes.length + 1}', next: toId),
+            ]),
+      ForeachNode() => from.next.contains(toId)
+          ? from
+          : from.copyWith(next: [...from.next, toId]),
+      SubjourneyNode() => from.next.contains(toId)
+          ? from
+          : from.copyWith(next: [...from.next, toId]),
       TerminalNode() => from,
     };
     _replaceNode(updated);
@@ -243,14 +296,24 @@ class EditorController extends StateNotifier<EditorState> {
     final from = state.dag.nodeOrNull(fromId);
     if (from == null) return;
     final updated = switch (from) {
-      TaskNode() =>
-        from.copyWith(next: from.next.where((n) => n != toId).toList()),
-      BranchNode() => from.copyWith(
-          arms: from.arms.where((a) => a.next != toId).toList()),
+      TaskNode() => from.copyWith(next: _without(from.next, toId)),
+      BranchNode() =>
+        from.copyWith(arms: from.arms.where((a) => a.next != toId).toList()),
+      ParallelNode() => from.copyWith(branches: _without(from.branches, toId)),
+      JoinNode() => from.copyWith(next: _without(from.next, toId)),
+      WaitNode() => from.copyWith(next: _without(from.next, toId)),
+      TimerNode() => from.copyWith(next: _without(from.next, toId)),
+      HumanNode() => from.copyWith(
+          outcomes: from.outcomes.where((o) => o.next != toId).toList()),
+      ForeachNode() => from.copyWith(next: _without(from.next, toId)),
+      SubjourneyNode() => from.copyWith(next: _without(from.next, toId)),
       TerminalNode() => from,
     };
     _replaceNode(updated);
   }
+
+  static List<String> _without(List<String> xs, String x) =>
+      xs.where((e) => e != x).toList();
 
   /// Replace a node wholesale (used by the inspector). The id must be unchanged.
   void replaceNode(DagNode node) {
@@ -268,14 +331,30 @@ class EditorController extends StateNotifier<EditorState> {
   /// Remove every reference to [removedId] from a surviving node.
   DagNode _stripReferences(DagNode n, String removedId) => switch (n) {
         TaskNode() => n.copyWith(
-            next: n.next.where((e) => e != removedId).toList(),
-            joinOn: n.joinOn.where((e) => e != removedId).toList(),
-            compensation: n.compensation == removedId ? null : n.compensation,
+            next: _without(n.next, removedId),
+            onFailure: n.onFailure == removedId ? null : n.onFailure,
           ),
         BranchNode() => n.copyWith(
-            joinOn: n.joinOn.where((e) => e != removedId).toList(),
             arms: n.arms.where((a) => a.next != removedId).toList(),
+            defaultNext: n.defaultNext == removedId ? null : n.defaultNext,
           ),
+        ParallelNode() => n.copyWith(branches: _without(n.branches, removedId)),
+        JoinNode() => n.copyWith(
+            joinOn: _without(n.joinOn, removedId),
+            next: _without(n.next, removedId),
+          ),
+        WaitNode() => n.copyWith(
+            next: _without(n.next, removedId),
+            onTimeout: n.onTimeout == removedId ? null : n.onTimeout,
+          ),
+        TimerNode() => n.copyWith(next: _without(n.next, removedId)),
+        HumanNode() => n.copyWith(
+            outcomes: n.outcomes.where((o) => o.next != removedId).toList()),
+        ForeachNode() => n.copyWith(
+            body: _without(n.body, removedId),
+            next: _without(n.next, removedId),
+          ),
+        SubjourneyNode() => n.copyWith(next: _without(n.next, removedId)),
         TerminalNode() => n,
       };
 

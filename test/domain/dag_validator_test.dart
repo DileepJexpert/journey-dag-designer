@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:journey_dag_designer/domain/models/branch_arm.dart';
 import 'package:journey_dag_designer/domain/models/dag.dart';
 import 'package:journey_dag_designer/domain/models/dag_node.dart';
+import 'package:journey_dag_designer/domain/models/node_policies.dart';
 import 'package:journey_dag_designer/domain/models/validation.dart';
 import 'package:journey_dag_designer/domain/services/dag_validator.dart';
 
@@ -16,7 +17,7 @@ void main() {
       .map((i) => i.code)
       .toSet();
 
-  test('the canonical §5 DAG is valid', () {
+  test('the canonical §7 DAG is valid', () {
     final result =
         validator.validate(canonicalLoanDag(), capabilities: loanCapabilities);
     expect(result.isValid, isTrue, reason: result.errors.toString());
@@ -29,15 +30,13 @@ void main() {
   });
 
   test('missing start node -> startNodeMissing', () {
-    const dag = Dag(startNodeId: 'ghost', nodes: [
-      DagNode.terminal(id: 'a'),
-    ]);
+    const dag = Dag(startNodeId: 'ghost', nodes: [DagNode.terminal(id: 'a')]);
     expect(codes(dag), contains(ValidationCode.startNodeMissing));
   });
 
   test('duplicate node id -> duplicateNodeId', () {
     const dag = Dag(startNodeId: 'a', nodes: [
-      DagNode.task(id: 'a', capabilityKey: 'kyc', next: ['a']),
+      DagNode.task(id: 'a', capability: 'kyc', next: ['a']),
       DagNode.terminal(id: 'a'),
     ]);
     expect(codes(dag), contains(ValidationCode.duplicateNodeId));
@@ -45,66 +44,86 @@ void main() {
 
   test('dangling edge -> danglingEdge', () {
     const dag = Dag(startNodeId: 'a', nodes: [
-      DagNode.task(id: 'a', capabilityKey: 'kyc', next: ['nowhere']),
+      DagNode.task(id: 'a', capability: 'kyc', next: ['nowhere']),
     ]);
     expect(codes(dag), contains(ValidationCode.danglingEdge));
   });
 
   test('unreachable node -> unreachableNode', () {
     const dag = Dag(startNodeId: 'a', nodes: [
-      DagNode.task(id: 'a', capabilityKey: 'kyc', next: ['b']),
+      DagNode.task(id: 'a', capability: 'kyc', next: ['b']),
       DagNode.terminal(id: 'b'),
       DagNode.terminal(id: 'orphan'),
     ]);
     expect(codes(dag), contains(ValidationCode.unreachableNode));
   });
 
-  test('cycle -> cycleDetected', () {
+  test('compute cycle -> cycleDetected', () {
     const dag = Dag(startNodeId: 'a', nodes: [
-      DagNode.task(id: 'a', capabilityKey: 'kyc', next: ['b']),
-      DagNode.task(id: 'b', capabilityKey: 'bureau', next: ['a']),
+      DagNode.task(id: 'a', capability: 'kyc', next: ['b']),
+      DagNode.task(id: 'b', capability: 'bureau', next: ['a']),
     ]);
     expect(codes(dag), contains(ValidationCode.cycleDetected));
   });
 
+  test('time-gated wait/timer loop is NOT a forbidden cycle', () {
+    const dag = Dag(startNodeId: 'reg', nodes: [
+      DagNode.task(id: 'reg', capability: 'kyc', next: ['await']),
+      DagNode.wait(
+          id: 'await',
+          waitFor: 'Callback',
+          timeout: '24h',
+          onTimeout: 'chase',
+          next: ['done']),
+      DagNode.timer(id: 'chase', delay: '2h', next: ['await']), // loops back
+      DagNode.terminal(id: 'done'),
+    ]);
+    expect(codes(dag), isNot(contains(ValidationCode.cycleDetected)));
+  });
+
+  test('branch without a default -> branchNoDefault', () {
+    const dag = Dag(startNodeId: 'd', nodes: [
+      DagNode.branch(id: 'd', arms: [BranchArm(when: 'x', next: 't')]),
+      DagNode.terminal(id: 't'),
+    ]);
+    expect(codes(dag), contains(ValidationCode.branchNoDefault));
+  });
+
   test('branch arm that never reaches a terminal -> branchArmDeadEnd', () {
-    // arm -> b -> c -> b would be a cycle; instead make an arm reach a task with
-    // no onward path to a terminal.
     const dag = Dag(startNodeId: 'd', nodes: [
       DagNode.branch(id: 'd', arms: [
-        BranchArm(expression: 'x', next: 't'),
-        BranchArm(expression: 'y', next: 'deadEnd'),
-      ]),
+        BranchArm(when: 'x', next: 't'),
+        BranchArm(when: 'y', next: 'deadEnd'),
+      ], defaultNext: 't'),
       DagNode.terminal(id: 't'),
-      // deadEnd is a task whose only successor loops back? No — keep acyclic:
-      // a task with no successors at all never reaches a terminal.
-      DagNode.task(id: 'deadEnd', capabilityKey: 'kyc'),
+      DagNode.task(id: 'deadEnd', capability: 'kyc'), // no path to a terminal
     ]);
     expect(codes(dag), contains(ValidationCode.branchArmDeadEnd));
   });
 
-  test('joinOn referencing a non-predecessor -> joinOnNotActualPredecessor', () {
+  test('join.joinOn referencing a non-predecessor -> joinOnNotActualPredecessor',
+      () {
     const dag = Dag(startNodeId: 'a', nodes: [
-      DagNode.task(id: 'a', capabilityKey: 'kyc', next: ['b']),
-      DagNode.task(id: 'b', capabilityKey: 'bureau', next: ['c'], joinOn: ['x']),
+      DagNode.task(id: 'a', capability: 'kyc', next: ['j']),
+      DagNode.join(id: 'j', joinOn: ['x'], next: ['c']),
       DagNode.terminal(id: 'c'),
-      DagNode.task(id: 'x', capabilityKey: 'scoring', next: ['c']),
+      DagNode.task(id: 'x', capability: 'scoring', next: ['c']),
     ]);
-    final set = codes(dag);
-    expect(set, contains(ValidationCode.joinOnNotActualPredecessor));
+    expect(codes(dag), contains(ValidationCode.joinOnNotActualPredecessor));
   });
 
-  test('joinOn referencing an unknown node -> joinOnUnknownPredecessor', () {
+  test('join.joinOn referencing an unknown node -> joinOnUnknownPredecessor', () {
     const dag = Dag(startNodeId: 'a', nodes: [
-      DagNode.task(id: 'a', capabilityKey: 'kyc', next: ['b']),
-      DagNode.task(id: 'b', capabilityKey: 'bureau', joinOn: ['ghost']),
+      DagNode.task(id: 'a', capability: 'kyc', next: ['j']),
+      DagNode.join(id: 'j', joinOn: ['ghost'], next: ['c']),
+      DagNode.terminal(id: 'c'),
     ]);
     expect(codes(dag), contains(ValidationCode.joinOnUnknownPredecessor));
   });
 
   test('money/booking node without compensation -> missingCompensation', () {
     const dag = Dag(startNodeId: 'a', nodes: [
-      DagNode.task(id: 'a', capabilityKey: 'lending-origination', next: ['b']),
+      DagNode.task(id: 'a', capability: 'lending-origination', next: ['b']),
       DagNode.terminal(id: 'b'),
     ]);
     expect(codes(dag), contains(ValidationCode.missingCompensation));
@@ -112,53 +131,38 @@ void main() {
 
   test('metered node without compensation -> missingCompensation', () {
     const dag = Dag(startNodeId: 'a', nodes: [
-      DagNode.task(id: 'a', capabilityKey: 'kyc', meter: 'finnone_pool', next: ['b']),
+      DagNode.task(
+          id: 'a',
+          capability: 'kyc',
+          policies: NodePolicies(meter: MeterPolicy(pool: 'finnone_pool')),
+          next: ['b']),
       DagNode.terminal(id: 'b'),
     ]);
     expect(codes(dag), contains(ValidationCode.missingCompensation));
   });
 
-  test('compensation pointing at a missing node -> danglingEdge', () {
-    const dag = Dag(startNodeId: 'a', nodes: [
-      DagNode.task(
-        id: 'a',
-        capabilityKey: 'lending-origination',
-        compensation: 'ghost', // not defined anywhere
-        next: ['b'],
-      ),
-      DagNode.terminal(id: 'b'),
+  test('wait without timeout/onTimeout -> waitMissingTimeout', () {
+    const dag = Dag(startNodeId: 'w', nodes: [
+      DagNode.wait(id: 'w', waitFor: 'Callback', next: ['done']),
+      DagNode.terminal(id: 'done'),
     ]);
-    final result = validator.validate(dag, capabilities: loanCapabilities);
-    expect(result.issues.map((i) => i.code), contains(ValidationCode.danglingEdge));
-    // ...and the dangling compensation must not also read as unreachable noise.
-    expect(result.invalidNodeIds, contains('a'));
-  });
-
-  test('a compensation terminal is reachable via the saga edge (not unreachable)',
-      () {
-    // n_reverse is only reachable through n_book.compensation; the canonical DAG
-    // must still validate clean (no unreachableNode for it).
-    final result =
-        validator.validate(canonicalLoanDag(), capabilities: loanCapabilities);
-    expect(result.errors, isEmpty, reason: result.errors.toString());
+    expect(codes(dag), contains(ValidationCode.waitMissingTimeout));
   });
 
   test('unregistered capability -> unknownCapability', () {
     const dag = Dag(startNodeId: 'a', nodes: [
-      DagNode.task(id: 'a', capabilityKey: 'scoring-decisioning', next: ['b']),
+      DagNode.task(id: 'a', capability: 'scoring-decisioning', next: ['b']),
       DagNode.terminal(id: 'b'),
     ]);
-    // "scoring-decisioning" is NOT a registered backend module — the real key
-    // is "scoring". The validator catches the drift the build doc example had.
     expect(codes(dag), contains(ValidationCode.unknownCapability));
   });
 
-  test('a valid join/fan-out DAG passes', () {
-    const dag = Dag(startNodeId: 'a', nodes: [
-      DagNode.task(id: 'a', capabilityKey: 'kyc', next: ['b', 'c']),
-      DagNode.task(id: 'b', capabilityKey: 'bureau', next: ['d']),
-      DagNode.task(id: 'c', capabilityKey: 'scoring', next: ['d']),
-      DagNode.task(id: 'd', capabilityKey: 'customer-party', joinOn: ['b', 'c'], next: ['e']),
+  test('a valid parallel/join fan-out DAG passes', () {
+    const dag = Dag(startNodeId: 'p', nodes: [
+      DagNode.parallel(id: 'p', branches: ['b', 'c']),
+      DagNode.task(id: 'b', capability: 'bureau', next: ['d']),
+      DagNode.task(id: 'c', capability: 'scoring', next: ['d']),
+      DagNode.join(id: 'd', joinOn: ['b', 'c'], next: ['e']),
       DagNode.terminal(id: 'e'),
     ]);
     final result = validator.validate(dag, capabilities: loanCapabilities);

@@ -8,8 +8,8 @@ void main() {
   const diff = DagDiffService();
 
   const base = Dag(startNodeId: 'a', nodes: [
-    DagNode.task(id: 'a', capabilityKey: 'kyc', next: ['b']),
-    DagNode.task(id: 'b', capabilityKey: 'bureau', next: ['c']),
+    DagNode.task(id: 'a', capability: 'kyc', next: ['b']),
+    DagNode.task(id: 'b', capability: 'bureau', next: ['c']),
     DagNode.terminal(id: 'c'),
   ]);
 
@@ -19,8 +19,8 @@ void main() {
 
   test('added node and edge are reported', () {
     const next = Dag(startNodeId: 'a', nodes: [
-      DagNode.task(id: 'a', capabilityKey: 'kyc', next: ['b']),
-      DagNode.task(id: 'b', capabilityKey: 'bureau', next: ['c', 'x']),
+      DagNode.task(id: 'a', capability: 'kyc', next: ['b']),
+      DagNode.task(id: 'b', capability: 'bureau', next: ['c', 'x']),
       DagNode.terminal(id: 'c'),
       DagNode.terminal(id: 'x'),
     ]);
@@ -32,7 +32,7 @@ void main() {
 
   test('removed node and edge are reported', () {
     const next = Dag(startNodeId: 'a', nodes: [
-      DagNode.task(id: 'a', capabilityKey: 'kyc', next: ['c']),
+      DagNode.task(id: 'a', capability: 'kyc', next: ['c']),
       DagNode.terminal(id: 'c'),
     ]);
     final d = diff.compute(base, next);
@@ -44,8 +44,8 @@ void main() {
 
   test('changed node config is reported (capability swap)', () {
     const next = Dag(startNodeId: 'a', nodes: [
-      DagNode.task(id: 'a', capabilityKey: 'kyc', next: ['b']),
-      DagNode.task(id: 'b', capabilityKey: 'scoring', next: ['c']), // changed
+      DagNode.task(id: 'a', capability: 'kyc', next: ['b']),
+      DagNode.task(id: 'b', capability: 'scoring', next: ['c']), // changed
       DagNode.terminal(id: 'c'),
     ]);
     final d = diff.compute(base, next);
@@ -56,8 +56,8 @@ void main() {
     const moved = Dag(
       startNodeId: 'a',
       nodes: [
-        DagNode.task(id: 'a', capabilityKey: 'kyc', next: ['b']),
-        DagNode.task(id: 'b', capabilityKey: 'bureau', next: ['c']),
+        DagNode.task(id: 'a', capability: 'kyc', next: ['b']),
+        DagNode.task(id: 'b', capability: 'bureau', next: ['c']),
         DagNode.terminal(id: 'c'),
       ],
       layout: {'a': NodeLayout(x: 999, y: 999)},

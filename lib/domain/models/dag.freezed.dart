@@ -19,7 +19,13 @@ mixin _$Dag {
   String get startNodeId => throw _privateConstructorUsedError;
   List<DagNode> get nodes => throw _privateConstructorUsedError;
 
-  /// nodeId -> persisted canvas position.
+  /// Named backpressure pools (Charter §7 `pools`): pool name -> cap.
+  Map<String, PoolSpec> get pools => throw _privateConstructorUsedError;
+
+  /// The typed context schema reference, e.g. "loan-origination-context@1".
+  String? get contextSchemaRef => throw _privateConstructorUsedError;
+
+  /// nodeId -> persisted canvas position (Designer-only, not engine config).
   Map<String, NodeLayout> get layout => throw _privateConstructorUsedError;
 
   /// Create a copy of Dag
@@ -36,6 +42,8 @@ abstract class $DagCopyWith<$Res> {
   $Res call(
       {String startNodeId,
       List<DagNode> nodes,
+      Map<String, PoolSpec> pools,
+      String? contextSchemaRef,
       Map<String, NodeLayout> layout});
 }
 
@@ -55,6 +63,8 @@ class _$DagCopyWithImpl<$Res, $Val extends Dag> implements $DagCopyWith<$Res> {
   $Res call({
     Object? startNodeId = null,
     Object? nodes = null,
+    Object? pools = null,
+    Object? contextSchemaRef = freezed,
     Object? layout = null,
   }) {
     return _then(_value.copyWith(
@@ -66,6 +76,14 @@ class _$DagCopyWithImpl<$Res, $Val extends Dag> implements $DagCopyWith<$Res> {
           ? _value.nodes
           : nodes // ignore: cast_nullable_to_non_nullable
               as List<DagNode>,
+      pools: null == pools
+          ? _value.pools
+          : pools // ignore: cast_nullable_to_non_nullable
+              as Map<String, PoolSpec>,
+      contextSchemaRef: freezed == contextSchemaRef
+          ? _value.contextSchemaRef
+          : contextSchemaRef // ignore: cast_nullable_to_non_nullable
+              as String?,
       layout: null == layout
           ? _value.layout
           : layout // ignore: cast_nullable_to_non_nullable
@@ -83,6 +101,8 @@ abstract class _$$DagImplCopyWith<$Res> implements $DagCopyWith<$Res> {
   $Res call(
       {String startNodeId,
       List<DagNode> nodes,
+      Map<String, PoolSpec> pools,
+      String? contextSchemaRef,
       Map<String, NodeLayout> layout});
 }
 
@@ -99,6 +119,8 @@ class __$$DagImplCopyWithImpl<$Res> extends _$DagCopyWithImpl<$Res, _$DagImpl>
   $Res call({
     Object? startNodeId = null,
     Object? nodes = null,
+    Object? pools = null,
+    Object? contextSchemaRef = freezed,
     Object? layout = null,
   }) {
     return _then(_$DagImpl(
@@ -110,6 +132,14 @@ class __$$DagImplCopyWithImpl<$Res> extends _$DagCopyWithImpl<$Res, _$DagImpl>
           ? _value._nodes
           : nodes // ignore: cast_nullable_to_non_nullable
               as List<DagNode>,
+      pools: null == pools
+          ? _value._pools
+          : pools // ignore: cast_nullable_to_non_nullable
+              as Map<String, PoolSpec>,
+      contextSchemaRef: freezed == contextSchemaRef
+          ? _value.contextSchemaRef
+          : contextSchemaRef // ignore: cast_nullable_to_non_nullable
+              as String?,
       layout: null == layout
           ? _value._layout
           : layout // ignore: cast_nullable_to_non_nullable
@@ -124,8 +154,11 @@ class _$DagImpl extends _Dag {
   const _$DagImpl(
       {required this.startNodeId,
       required final List<DagNode> nodes,
+      final Map<String, PoolSpec> pools = const <String, PoolSpec>{},
+      this.contextSchemaRef,
       final Map<String, NodeLayout> layout = const <String, NodeLayout>{}})
       : _nodes = nodes,
+        _pools = pools,
         _layout = layout,
         super._();
 
@@ -139,10 +172,26 @@ class _$DagImpl extends _Dag {
     return EqualUnmodifiableListView(_nodes);
   }
 
-  /// nodeId -> persisted canvas position.
+  /// Named backpressure pools (Charter §7 `pools`): pool name -> cap.
+  final Map<String, PoolSpec> _pools;
+
+  /// Named backpressure pools (Charter §7 `pools`): pool name -> cap.
+  @override
+  @JsonKey()
+  Map<String, PoolSpec> get pools {
+    if (_pools is EqualUnmodifiableMapView) return _pools;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableMapView(_pools);
+  }
+
+  /// The typed context schema reference, e.g. "loan-origination-context@1".
+  @override
+  final String? contextSchemaRef;
+
+  /// nodeId -> persisted canvas position (Designer-only, not engine config).
   final Map<String, NodeLayout> _layout;
 
-  /// nodeId -> persisted canvas position.
+  /// nodeId -> persisted canvas position (Designer-only, not engine config).
   @override
   @JsonKey()
   Map<String, NodeLayout> get layout {
@@ -153,7 +202,7 @@ class _$DagImpl extends _Dag {
 
   @override
   String toString() {
-    return 'Dag(startNodeId: $startNodeId, nodes: $nodes, layout: $layout)';
+    return 'Dag(startNodeId: $startNodeId, nodes: $nodes, pools: $pools, contextSchemaRef: $contextSchemaRef, layout: $layout)';
   }
 
   @override
@@ -164,6 +213,9 @@ class _$DagImpl extends _Dag {
             (identical(other.startNodeId, startNodeId) ||
                 other.startNodeId == startNodeId) &&
             const DeepCollectionEquality().equals(other._nodes, _nodes) &&
+            const DeepCollectionEquality().equals(other._pools, _pools) &&
+            (identical(other.contextSchemaRef, contextSchemaRef) ||
+                other.contextSchemaRef == contextSchemaRef) &&
             const DeepCollectionEquality().equals(other._layout, _layout));
   }
 
@@ -172,6 +224,8 @@ class _$DagImpl extends _Dag {
       runtimeType,
       startNodeId,
       const DeepCollectionEquality().hash(_nodes),
+      const DeepCollectionEquality().hash(_pools),
+      contextSchemaRef,
       const DeepCollectionEquality().hash(_layout));
 
   /// Create a copy of Dag
@@ -187,6 +241,8 @@ abstract class _Dag extends Dag {
   const factory _Dag(
       {required final String startNodeId,
       required final List<DagNode> nodes,
+      final Map<String, PoolSpec> pools,
+      final String? contextSchemaRef,
       final Map<String, NodeLayout> layout}) = _$DagImpl;
   const _Dag._() : super._();
 
@@ -195,7 +251,15 @@ abstract class _Dag extends Dag {
   @override
   List<DagNode> get nodes;
 
-  /// nodeId -> persisted canvas position.
+  /// Named backpressure pools (Charter §7 `pools`): pool name -> cap.
+  @override
+  Map<String, PoolSpec> get pools;
+
+  /// The typed context schema reference, e.g. "loan-origination-context@1".
+  @override
+  String? get contextSchemaRef;
+
+  /// nodeId -> persisted canvas position (Designer-only, not engine config).
   @override
   Map<String, NodeLayout> get layout;
 

@@ -1,19 +1,18 @@
-/// Pure graph validation (build doc §6). Mirrors the server schema; the server
-/// re-validates authoritatively (build doc §1.5). Keep every rule here in
-/// lockstep with the backend validator — the codes in [ValidationCode] are the
-/// shared vocabulary.
-///
-/// Rules:
-///  1. non-empty DAG; [Dag.startNodeId] resolves to a real node.
-///  2. unique node ids.
-///  3. every node reachable from the start node.
-///  4. acyclic (DFS back-edge detection).
-///  5. every edge target exists (no dangling edges).
-///  6. every branch arm eventually reaches a terminal node.
-///  7. `joinOn` references real nodes that are ACTUAL predecessors of the node.
-///  8. any node with a `meter` OR a money/booking capability MUST define
-///     `compensation`.
-///  9. every `capabilityKey` exists in the supplied capability registry.
+/// Pure graph validation (Charter §9). Mirrors the engine's publish-time check;
+/// the engine re-validates authoritatively. The [ValidationCode]s are the shared
+/// vocabulary. Rules:
+///  1. non-empty DAG; `startNodeId` resolves; unique ids.
+///  2. every node reachable from the start.
+///  3. acyclic — EXCEPT time-gated loops through `wait`/`timer` (Charter §5 chase
+///     pattern); business iteration is via bounded `foreach`.
+///  4. no dangling edges (every successor / `onFailure` node-id target exists).
+///  5. every path reaches a `terminal`.
+///  6. every `branch` declares a `default` (total coverage, §9.5).
+///  7. every `join.joinOn` references real, actual predecessors.
+///  8. any node with a `meter` policy OR a money/booking capability MUST declare
+///     `compensation` (saga safety, §9.6).
+///  9. every `wait` declares `timeout` + `onTimeout` (§9.7).
+/// 10. every task `capability` exists in the registry (§9.8).
 library;
 
 import '../models/capability.dart';
@@ -24,42 +23,38 @@ import '../models/validation.dart';
 class DagValidator {
   const DagValidator();
 
-  /// [capabilities] is the registered palette (keyed by [Capability.key]); a
-  /// task referencing a key not present is an error (rule 9). When validating
-  /// without a registry (e.g. a structural-only check) pass an empty list and
-  /// rule 9 simply reports every task as unknown — callers should pass the real
-  /// registry.
+  static const _failureKeywords = {'compensate', 'dlq', 'fail'};
+
   ValidationResult validate(Dag dag, {required List<Capability> capabilities}) {
     final issues = <ValidationIssue>[];
     final capByKey = {for (final c in capabilities) c.key: c};
 
     if (dag.nodes.isEmpty) {
-      issues.add(const ValidationIssue(
-        code: ValidationCode.emptyDag,
-        severity: ValidationSeverity.error,
-        message: 'The journey has no nodes.',
-      ));
-      return ValidationResult(issues: issues);
-    }
-
-    // Rule 2: unique ids.
-    final seen = <String>{};
-    final duplicates = <String>{};
-    for (final n in dag.nodes) {
-      if (!seen.add(n.id)) duplicates.add(n.id);
-    }
-    for (final id in duplicates) {
-      issues.add(ValidationIssue(
-        code: ValidationCode.duplicateNodeId,
-        severity: ValidationSeverity.error,
-        message: 'Duplicate node id "$id".',
-        nodeId: id,
-      ));
+      return const ValidationResult(issues: [
+        ValidationIssue(
+          code: ValidationCode.emptyDag,
+          severity: ValidationSeverity.error,
+          message: 'The journey has no nodes.',
+        ),
+      ]);
     }
 
     final byId = dag.byId;
 
-    // Rule 1: start node resolves.
+    // Unique ids.
+    final seen = <String>{};
+    for (final n in dag.nodes) {
+      if (!seen.add(n.id)) {
+        issues.add(ValidationIssue(
+          code: ValidationCode.duplicateNodeId,
+          severity: ValidationSeverity.error,
+          message: 'Duplicate node id "${n.id}".',
+          nodeId: n.id,
+        ));
+      }
+    }
+
+    // Start node resolves.
     if (!byId.containsKey(dag.startNodeId)) {
       issues.add(ValidationIssue(
         code: ValidationCode.startNodeMissing,
@@ -68,7 +63,7 @@ class DagValidator {
       ));
     }
 
-    // Rule 5: dangling edges (targets that don't exist).
+    // Dangling edges (forward successors + onFailure node-id targets).
     for (final n in dag.nodes) {
       for (final target in n.successors) {
         if (!byId.containsKey(target)) {
@@ -80,22 +75,21 @@ class DagValidator {
           ));
         }
       }
-      // A declared compensation must resolve to a real node — otherwise the
-      // engine has nothing to run on failure (the saga edge is dangling).
       if (n is TaskNode &&
-          n.compensation != null &&
-          !byId.containsKey(n.compensation)) {
+          n.onFailure != null &&
+          !_failureKeywords.contains(n.onFailure) &&
+          !byId.containsKey(n.onFailure)) {
         issues.add(ValidationIssue(
           code: ValidationCode.danglingEdge,
           severity: ValidationSeverity.error,
           message:
-              'Node "${n.id}" declares compensation "${n.compensation}", which does not exist.',
+              'Node "${n.id}" onFailure routes to missing node "${n.onFailure}".',
           nodeId: n.id,
         ));
       }
     }
 
-    // Predecessor map (only over edges whose endpoints both exist).
+    // Predecessor map over existing forward edges.
     final predecessors = <String, Set<String>>{
       for (final n in dag.nodes) n.id: <String>{},
     };
@@ -105,14 +99,27 @@ class DagValidator {
       }
     }
 
-    // Rule 7: joinOn must reference actual predecessors.
+    // Branch must have a default (total coverage).
     for (final n in dag.nodes) {
+      if (n is BranchNode && (n.defaultNext == null || n.defaultNext!.isEmpty)) {
+        issues.add(ValidationIssue(
+          code: ValidationCode.branchNoDefault,
+          severity: ValidationSeverity.error,
+          message: 'Branch "${n.id}" must declare a default arm.',
+          nodeId: n.id,
+        ));
+      }
+    }
+
+    // join.joinOn must be real, actual predecessors.
+    for (final n in dag.nodes) {
+      if (n is! JoinNode) continue;
       for (final dep in n.joinOn) {
         if (!byId.containsKey(dep)) {
           issues.add(ValidationIssue(
             code: ValidationCode.joinOnUnknownPredecessor,
             severity: ValidationSeverity.error,
-            message: 'Node "${n.id}" joins on unknown node "$dep".',
+            message: 'Join "${n.id}" joins on unknown node "$dep".',
             nodeId: n.id,
           ));
         } else if (!predecessors[n.id]!.contains(dep)) {
@@ -120,49 +127,59 @@ class DagValidator {
             code: ValidationCode.joinOnNotActualPredecessor,
             severity: ValidationSeverity.error,
             message:
-                'Node "${n.id}" joins on "$dep", which is not one of its predecessors.',
+                'Join "${n.id}" joins on "$dep", which is not one of its predecessors.',
             nodeId: n.id,
           ));
         }
       }
     }
 
-    // Rule 8: money/booking or metered nodes need compensation.
+    // Saga safety: meter or money/booking => compensation required.
     for (final n in dag.nodes) {
-      if (n is TaskNode) {
-        final cap = capByKey[n.capabilityKey];
-        final needsCompensation =
-            n.meter != null || (cap?.isMoneyOrBookingNode ?? false);
-        if (needsCompensation && n.compensation == null) {
-          issues.add(ValidationIssue(
-            code: ValidationCode.missingCompensation,
-            severity: ValidationSeverity.error,
-            message:
-                'Node "${n.id}" is a money/booking or metered step and must define a compensation.',
-            nodeId: n.id,
-          ));
-        }
-      }
-    }
-
-    // Rule 9: capability keys exist.
-    for (final n in dag.nodes) {
-      if (n is TaskNode && !capByKey.containsKey(n.capabilityKey)) {
+      if (n is! TaskNode) continue;
+      final cap = capByKey[n.capability];
+      final metered = n.policies?.meter != null;
+      final money = cap?.isMoneyOrBookingNode ?? false;
+      if ((metered || money) && n.compensation == null) {
         issues.add(ValidationIssue(
-          code: ValidationCode.unknownCapability,
+          code: ValidationCode.missingCompensation,
           severity: ValidationSeverity.error,
           message:
-              'Node "${n.id}" references unregistered capability "${n.capabilityKey}".',
+              'Node "${n.id}" is a money/booking or metered step and must declare a compensation.',
           nodeId: n.id,
         ));
       }
     }
 
-    // Reachability + acyclicity only make sense if the start node exists.
+    // wait needs timeout + onTimeout.
+    for (final n in dag.nodes) {
+      if (n is! WaitNode) continue;
+      if (n.timeout == null || n.onTimeout == null) {
+        issues.add(ValidationIssue(
+          code: ValidationCode.waitMissingTimeout,
+          severity: ValidationSeverity.error,
+          message: 'Wait "${n.id}" must declare both timeout and onTimeout.',
+          nodeId: n.id,
+        ));
+      }
+    }
+
+    // Capability registry.
+    for (final n in dag.nodes) {
+      if (n is TaskNode && !capByKey.containsKey(n.capability)) {
+        issues.add(ValidationIssue(
+          code: ValidationCode.unknownCapability,
+          severity: ValidationSeverity.error,
+          message:
+              'Node "${n.id}" references unregistered capability "${n.capability}".',
+          nodeId: n.id,
+        ));
+      }
+    }
+
+    // Reachability + acyclicity (only meaningful if start exists).
     if (byId.containsKey(dag.startNodeId)) {
       final reachable = _reachableFrom(dag.startNodeId, byId);
-
-      // Rule 3: every node reachable.
       for (final n in dag.nodes) {
         if (!reachable.contains(n.id)) {
           issues.add(ValidationIssue(
@@ -174,34 +191,27 @@ class DagValidator {
         }
       }
 
-      // Rule 4: acyclic (DFS back-edge).
-      final cycleNode = _firstBackEdgeNode(dag.startNodeId, byId);
+      final cycleNode = _firstComputeCycle(dag.startNodeId, byId);
       if (cycleNode != null) {
         issues.add(ValidationIssue(
           code: ValidationCode.cycleDetected,
           severity: ValidationSeverity.error,
-          message: 'The graph contains a cycle (at node "$cycleNode").',
+          message:
+              'Cycle detected at "$cycleNode" (only time-gated wait/timer loops or bounded foreach may repeat).',
           nodeId: cycleNode,
         ));
       }
 
-      // Rule 6: every branch arm reaches a terminal (only meaningful when acyclic).
-      if (cycleNode == null) {
-        for (final n in dag.nodes) {
-          if (n is BranchNode) {
-            for (final arm in n.arms) {
-              if (byId.containsKey(arm.next) &&
-                  !_reachesTerminal(arm.next, byId)) {
-                issues.add(ValidationIssue(
-                  code: ValidationCode.branchArmDeadEnd,
-                  severity: ValidationSeverity.error,
-                  message:
-                      'Branch "${n.id}" arm "${arm.expression}" never reaches a terminal node.',
-                  nodeId: n.id,
-                ));
-              }
-            }
-          }
+      for (final n in dag.nodes) {
+        if (n is TerminalNode) continue;
+        if (!reachable.contains(n.id)) continue;
+        if (!_reachesTerminal(n.id, byId, {})) {
+          issues.add(ValidationIssue(
+            code: ValidationCode.branchArmDeadEnd,
+            severity: ValidationSeverity.error,
+            message: 'Node "${n.id}" has a path that never reaches a terminal.',
+            nodeId: n.id,
+          ));
         }
       }
     }
@@ -220,19 +230,20 @@ class DagValidator {
       for (final s in node.successors) {
         if (byId.containsKey(s)) stack.add(s);
       }
-      // A compensation node is reachable via the saga edge, so it is NOT
-      // unreachable just because no `next`/arm points at it.
+      // Failure / compensation edges keep their targets reachable too.
       if (node is TaskNode &&
-          node.compensation != null &&
-          byId.containsKey(node.compensation)) {
-        stack.add(node.compensation!);
+          node.onFailure != null &&
+          !_failureKeywords.contains(node.onFailure) &&
+          byId.containsKey(node.onFailure)) {
+        stack.add(node.onFailure!);
       }
     }
     return visited;
   }
 
-  /// Returns the node at which a back-edge (cycle) is first found, or null.
-  String? _firstBackEdgeNode(String start, Map<String, DagNode> byId) {
+  /// Back-edge detection that ignores edges INTO a `wait`/`timer` node — those
+  /// model time-gated chase loops (Charter §5), not forbidden compute cycles.
+  String? _firstComputeCycle(String start, Map<String, DagNode> byId) {
     final state = <String, int>{}; // 0=visiting, 1=done
     String? found;
 
@@ -242,10 +253,12 @@ class DagValidator {
       final node = byId[id];
       if (node != null) {
         for (final s in node.successors) {
-          if (!byId.containsKey(s)) continue;
+          final target = byId[s];
+          if (target == null) continue;
+          if (target is WaitNode || target is TimerNode) continue; // time-gated
           final st = state[s];
           if (st == 0) {
-            found = s; // back-edge into a node still on the stack
+            found = s;
             return;
           } else if (st == null) {
             visit(s);
@@ -260,14 +273,15 @@ class DagValidator {
     return found;
   }
 
-  /// Assumes acyclicity. True if some path from [id] ends at a terminal node.
-  bool _reachesTerminal(String id, Map<String, DagNode> byId) {
+  bool _reachesTerminal(
+      String id, Map<String, DagNode> byId, Set<String> onPath) {
     final node = byId[id];
     if (node == null) return false;
     if (node is TerminalNode) return true;
-    for (final s in node.successors) {
-      if (byId.containsKey(s) && _reachesTerminal(s, byId)) return true;
-    }
-    return false;
+    if (!onPath.add(id)) return false; // avoid infinite recursion on loops
+    final result = node.successors
+        .any((s) => byId.containsKey(s) && _reachesTerminal(s, byId, onPath));
+    onPath.remove(id);
+    return result;
   }
 }

@@ -43,25 +43,55 @@ class Palette extends ConsumerWidget {
         const SizedBox(height: 4),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Row(
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 6,
             children: [
-              Expanded(
-                child: _StructuralButton(
+              _StructuralButton(
                   icon: Icons.call_split,
                   label: 'Branch',
                   color: StatusColors.draft,
-                  onTap: enabled ? controller.addBranch : null,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: _StructuralButton(
+                  onTap: enabled ? controller.addBranch : null),
+              _StructuralButton(
+                  icon: Icons.account_tree,
+                  label: 'Parallel',
+                  color: StatusColors.draft,
+                  onTap: enabled ? controller.addParallel : null),
+              _StructuralButton(
+                  icon: Icons.merge,
+                  label: 'Join',
+                  color: StatusColors.draft,
+                  onTap: enabled ? controller.addJoin : null),
+              _StructuralButton(
+                  icon: Icons.hourglass_empty,
+                  label: 'Wait',
+                  color: const Color(0xFF8A63D2),
+                  onTap: enabled ? controller.addWait : null),
+              _StructuralButton(
+                  icon: Icons.schedule,
+                  label: 'Timer',
+                  color: const Color(0xFF8A63D2),
+                  onTap: enabled ? controller.addTimer : null),
+              _StructuralButton(
+                  icon: Icons.person_outline,
+                  label: 'Human',
+                  color: const Color(0xFF8A63D2),
+                  onTap: enabled ? controller.addHuman : null),
+              _StructuralButton(
+                  icon: Icons.repeat,
+                  label: 'Foreach',
+                  color: const Color(0xFF1F9E8F),
+                  onTap: enabled ? controller.addForeach : null),
+              _StructuralButton(
+                  icon: Icons.subdirectory_arrow_right,
+                  label: 'Subjourney',
+                  color: const Color(0xFF1F9E8F),
+                  onTap: enabled ? controller.addSubjourney : null),
+              _StructuralButton(
                   icon: Icons.stop_circle_outlined,
                   label: 'Terminal',
                   color: StatusColors.published,
-                  onTap: enabled ? controller.addTerminal : null,
-                ),
-              ),
+                  onTap: enabled ? controller.addTerminal : null),
             ],
           ),
         ),
