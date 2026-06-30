@@ -1,9 +1,9 @@
 /// go_router config with an auth redirect guard (build doc §10). Unauthenticated
 /// users are sent to /login; authenticated users away from /login.
 ///
-/// Only the routes that exist in this scaffold are wired (login, journeys). The
-/// editor/versions/approvals/audit/bindings routes (build doc §10) are added as
-/// their features land.
+/// Wired routes: login, the journey registry, and the per-journey editor
+/// (`/journeys/:id`). The remaining build-doc routes (versions/approvals/audit/
+/// bindings) are added as their features land.
 library;
 
 import 'package:flutter/widgets.dart';
@@ -12,6 +12,7 @@ import 'package:go_router/go_router.dart';
 
 import '../core/auth/auth_controller.dart';
 import '../features/auth/login_screen.dart';
+import '../features/editor/editor_screen.dart';
 import '../features/journeys/journeys_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -27,7 +28,17 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: _AuthListenable(ref),
     routes: [
       GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
-      GoRoute(path: '/journeys', builder: (_, __) => const JourneysScreen()),
+      GoRoute(
+        path: '/journeys',
+        builder: (_, __) => const JourneysScreen(),
+        routes: [
+          GoRoute(
+            path: ':id',
+            builder: (_, state) =>
+                EditorScreen(journeyId: state.pathParameters['id']!),
+          ),
+        ],
+      ),
     ],
   );
 });
