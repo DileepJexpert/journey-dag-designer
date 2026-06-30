@@ -218,6 +218,17 @@ class _PositionedNode extends StatelessWidget {
   final void Function(Offset delta)? onDrag;
   final VoidCallback? onStartConnect;
 
+  /// Which engine tier still owes EXECUTION for this node, if any — so authors
+  /// don't assume a drawn meter/saga/async node runs today. null = T1 (runs now).
+  String? get _tierBadge => switch (node) {
+        WaitNode() || TimerNode() => 'T3',
+        HumanNode() || ForeachNode() || SubjourneyNode() => 'T4',
+        TaskNode(:final policies, :final compensation)
+            when policies?.meter != null || compensation != null =>
+          'T2',
+        _ => null,
+      };
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -284,6 +295,30 @@ class _PositionedNode extends StatelessWidget {
                                       fontWeight: FontWeight.w600,
                                       fontSize: 13)),
                             ),
+                            if (_tierBadge != null)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 4),
+                                child: Tooltip(
+                                  message:
+                                      'Authored, not yet executed by the engine ($_tierBadge tier)',
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 4, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFE0A100)
+                                          .withValues(alpha: 0.25),
+                                      borderRadius: BorderRadius.circular(3),
+                                      border: Border.all(
+                                          color: const Color(0xFFE0A100)),
+                                    ),
+                                    child: Text(_tierBadge!,
+                                        style: const TextStyle(
+                                            fontSize: 8.5,
+                                            color: Color(0xFFE0A100),
+                                            fontWeight: FontWeight.bold)),
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                         Text(node.id,
