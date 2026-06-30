@@ -257,3 +257,97 @@ Journey seedPaymentJourney(DateTime now) => Journey(
       ],
       activeVersion: 1,
     );
+
+// ---------------------------------------------------------------------------
+// E-mandate journeys (BRD §8) — the two e-mandate flows authored as §7 config
+// over the Mandate capability, NOT as services. This is the consolidation thesis
+// in action: emandate-management collapses into Mandate capability + journey JSON.
+// ---------------------------------------------------------------------------
+
+/// autopay-setup: one task (setupAutopayLink) -> terminal.
+Dag seedAutopaySetupDag() => const Dag(
+      startNodeId: 'n_setup',
+      contextSchemaRef: 'emandate-context@1',
+      nodes: [
+        DagNode.task(
+            id: 'n_setup',
+            capability: 'mandate',
+            operation: 'setupAutopayLink',
+            output: 'context.autopay',
+            next: ['n_done']),
+        DagNode.terminal(
+            id: 'n_done', action: 'notify_channel', emit: ['AutopayLinkSent']),
+      ],
+      layout: {
+        'n_setup': NodeLayout(x: 80, y: 160),
+        'n_done': NodeLayout(x: 320, y: 160),
+      },
+    );
+
+Journey seedAutopaySetupJourney(DateTime now) => Journey(
+      id: 'jr_emandate_autopay',
+      key: 'emandate-autopay-setup',
+      name: 'E-mandate Autopay Setup',
+      businessLine: 'PAYMENTS',
+      versions: [
+        JourneyVersion(
+          version: 1,
+          status: ApprovalStatus.published,
+          dag: seedAutopaySetupDag(),
+          authorId: 'maker-1',
+          approverId: 'checker-1',
+          updatedAt: now,
+          note: 'E-mandate autopay link setup (BRD §8)',
+        ),
+      ],
+      activeVersion: 1,
+    );
+
+/// cancel: cancel task -> branch(found?) -> cancelled | not-found.
+Dag seedCancelDag() => const Dag(
+      startNodeId: 'n_cancel',
+      contextSchemaRef: 'emandate-context@1',
+      nodes: [
+        DagNode.task(
+            id: 'n_cancel',
+            capability: 'mandate',
+            operation: 'cancel',
+            output: 'context.cancel',
+            next: ['n_decide']),
+        DagNode.branch(id: 'n_decide', arms: [
+          BranchArm(when: 'context.cancel.found == true', next: 'n_done'),
+        ], defaultNext: 'n_notFound'),
+        DagNode.terminal(
+            id: 'n_done', action: 'notify_channel', emit: ['MandateCancelled']),
+        DagNode.terminal(
+            id: 'n_notFound',
+            status: TerminalStatus.rejected,
+            action: 'notify_channel',
+            emit: ['MandateNotFound']),
+      ],
+      layout: {
+        'n_cancel': NodeLayout(x: 80, y: 200),
+        'n_decide': NodeLayout(x: 320, y: 200),
+        'n_done': NodeLayout(x: 560, y: 120),
+        'n_notFound': NodeLayout(x: 560, y: 300),
+      },
+    );
+
+Journey seedCancelJourney(DateTime now) => Journey(
+      id: 'jr_emandate_cancel',
+      key: 'emandate-cancel',
+      name: 'E-mandate Cancel',
+      businessLine: 'PAYMENTS',
+      versions: [
+        JourneyVersion(
+          version: 1,
+          status: ApprovalStatus.published,
+          dag: seedCancelDag(),
+          authorId: 'maker-1',
+          approverId: 'checker-1',
+          updatedAt: now,
+          note: 'E-mandate cancellation via CBS NACH (BRD §8)',
+        ),
+      ],
+      activeVersion: 1,
+    );

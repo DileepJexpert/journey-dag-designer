@@ -19,6 +19,12 @@ class MockJourneyRepository implements JourneyRepository {
     // The payments journey — third channel, shown as config (config-not-code).
     final payment = seedPaymentJourney(ts);
     _journeys[payment.id] = payment;
+    // The two e-mandate journeys (BRD §8) — emandate-management consolidated into
+    // the Mandate capability + journey JSON.
+    final autopay = seedAutopaySetupJourney(ts);
+    _journeys[autopay.id] = autopay;
+    final cancel = seedCancelJourney(ts);
+    _journeys[cancel.id] = cancel;
   }
 
   final DagValidator _validator;

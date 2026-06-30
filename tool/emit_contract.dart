@@ -27,6 +27,12 @@ const contractPath = 'contract/loan-origination.journey.json';
 const paymentContractKey = 'payment-execution';
 const paymentContractPath = 'contract/payment-execution.journey.json';
 
+/// The two e-mandate journeys (BRD §8) over the Mandate capability.
+const autopayContractKey = 'emandate-autopay-setup';
+const autopayContractPath = 'contract/emandate-autopay-setup.journey.json';
+const cancelContractKey = 'emandate-cancel';
+const cancelContractPath = 'contract/emandate-cancel.journey.json';
+
 /// The exact bytes (string) of the loan contract: serializer output + trailing LF.
 String contractContents() {
   const serializer = ConfigSerializer();
@@ -39,9 +45,21 @@ String paymentContractContents() {
   return '${serializer.toJsonString(seedPaymentDag(), key: paymentContractKey)}\n';
 }
 
+String autopayContractContents() {
+  const serializer = ConfigSerializer();
+  return '${serializer.toJsonString(seedAutopaySetupDag(), key: autopayContractKey)}\n';
+}
+
+String cancelContractContents() {
+  const serializer = ConfigSerializer();
+  return '${serializer.toJsonString(seedCancelDag(), key: cancelContractKey)}\n';
+}
+
 void main() {
   _write(contractPath, contractContents());
   _write(paymentContractPath, paymentContractContents());
+  _write(autopayContractPath, autopayContractContents());
+  _write(cancelContractPath, cancelContractContents());
 }
 
 void _write(String path, String contents) {
