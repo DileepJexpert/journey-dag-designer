@@ -9,7 +9,6 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/models/app_user.dart';
-import '../config/env.dart';
 import 'token_store.dart';
 
 final tokenStoreProvider = Provider<TokenStore>((ref) {
@@ -31,17 +30,18 @@ class AuthController extends Notifier<AuthState> {
     if (username.isEmpty || password.isEmpty) {
       throw ArgumentError('username and password required');
     }
-    if (Env.useMockBackend) {
-      final roles = <UserRole>{
-        UserRole.maker,
-        if (username.toLowerCase().startsWith('checker')) UserRole.checker,
-      };
-      await ref.read(tokenStoreProvider).write('mock-token-$username');
-      state = AuthState(user: AppUser(id: username, name: username, roles: roles));
-      return;
-    }
-    // Real login wiring (POST /auth/login) lands here in a later step.
-    throw UnimplementedError('HTTP login not wired yet; use mock mode');
+    // Identity is ASSERTED, not authenticated — in mock AND live mode: the
+    // username becomes the actor id every repository call carries (the mock
+    // stamps it locally; the HTTP client sends it as X-User-Id and the
+    // REGISTRY enforces maker-checker on it, 403s included). Replacing this
+    // assertion with SSO/OIDC-verified identity is a tracked production gate
+    // (platform README); the "checker*" role convention mirrors the seed data.
+    final roles = <UserRole>{
+      UserRole.maker,
+      if (username.toLowerCase().startsWith('checker')) UserRole.checker,
+    };
+    await ref.read(tokenStoreProvider).write('session-$username');
+    state = AuthState(user: AppUser(id: username, name: username, roles: roles));
   }
 
   Future<void> logout() async {

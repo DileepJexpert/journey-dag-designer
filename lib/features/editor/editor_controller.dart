@@ -13,6 +13,7 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
+import '../../core/error/failure.dart';
 import '../../domain/models/branch_arm.dart';
 import '../../domain/models/capability.dart';
 import '../../domain/models/dag.dart';
@@ -103,16 +104,31 @@ class EditorController extends StateNotifier<EditorState> {
   final Ref _ref;
   final String journeyId;
 
+  /// Monotonic guard against the LAST-RESPONSE-WINS race: rapid version
+  /// switches fire overlapping loads over real (async) HTTP, and without this
+  /// the slowest response would overwrite the user's latest selection. Only
+  /// the newest in-flight load may apply its result.
+  int _loadSeq = 0;
+
+  /// Monotonic edit generation for the DIRTY-FLAG race: a save snapshots the
+  /// generation it persisted; edits made while that save was in flight bump it,
+  /// and completion only clears `dirty` if nothing changed meanwhile.
+  int _editGen = 0;
+
   // ---------------------------------------------------------------------------
   // Load
   // ---------------------------------------------------------------------------
 
   Future<void> load({int? selectVersion}) async {
+    final seq = ++_loadSeq;
     state = state.copyWith(loading: true, error: null);
     try {
       final repo = _ref.read(journeyRepositoryProvider);
       final caps = await _ref.read(capabilityRepositoryProvider).listCapabilities();
       final journey = await repo.getJourney(journeyId);
+      if (seq != _loadSeq || !mounted) {
+        return; // a newer load superseded this one — drop the stale response
+      }
 
       // Prefer an explicit selection, then the editable draft, then active, then
       // the highest version present.
@@ -138,6 +154,9 @@ class EditorController extends StateNotifier<EditorState> {
         validation: _validate(dag, caps),
       );
     } catch (e) {
+      if (seq != _loadSeq || !mounted) {
+        return; // stale failure — the newer load owns the state
+      }
       state = state.copyWith(loading: false, error: '$e');
     }
   }
@@ -155,6 +174,9 @@ class EditorController extends StateNotifier<EditorState> {
     layout[nodeId] = NodeLayout(x: x < 0 ? 0 : x, y: y < 0 ? 0 : y);
     // Position is persisted with the draft but isn't a structural change; mark
     // dirty only when editable so read-only versions stay clean.
+    if (state.isEditable) {
+      _editGen++; // a move made during an in-flight save must survive it
+    }
     state = state.copyWith(
       dag: state.dag.copyWith(layout: layout),
       dirty: state.isEditable ? true : state.dirty,
@@ -359,6 +381,7 @@ class EditorController extends StateNotifier<EditorState> {
       };
 
   void _commit(Dag dag, {Object? select = _keepSelection}) {
+    _editGen++;
     state = state.copyWith(
       dag: dag,
       dirty: true,
@@ -390,9 +413,15 @@ class EditorController extends StateNotifier<EditorState> {
     if (!state.isEditable) return;
     await _run(() async {
       final repo = _ref.read(journeyRepositoryProvider);
+      // DIRTY-FLAG RACE guard: snapshot the edit generation the save persists.
+      // Edits made while the (real, async) save is in flight bump _editGen —
+      // clearing dirty then would silently lose their "unsaved" marker, and a
+      // later Submit could skip re-saving them.
+      final savedGen = _editGen;
       await repo.saveDraft(journeyId, state.workingVersion!, state.dag);
       final journey = await repo.getJourney(journeyId);
-      state = state.copyWith(journey: journey, dirty: false);
+      if (!mounted) return;
+      state = state.copyWith(journey: journey, dirty: _editGen != savedGen);
     });
   }
 
@@ -428,10 +457,24 @@ class EditorController extends StateNotifier<EditorState> {
     state = state.copyWith(busy: true, error: null);
     try {
       await action();
+    } on ValidationFailure catch (e) {
+      // The server's authoritative 422: the designer-vocabulary issues land in
+      // the SAME validation panel as live client findings (jump-to-node works),
+      // never a generic toast. The next structural edit re-validates live.
+      if (!mounted) return;
+      state = state.copyWith(
+        error: e.message,
+        validation: e.issues.isEmpty
+            ? state.validation
+            : ValidationResult(issues: e.issues),
+      );
     } catch (e) {
-      state = state.copyWith(error: '$e');
+      if (!mounted) return;
+      state = state.copyWith(error: '$e'); // Failure.toString() is the message
     } finally {
-      state = state.copyWith(busy: false);
+      if (mounted) {
+        state = state.copyWith(busy: false);
+      }
     }
   }
 

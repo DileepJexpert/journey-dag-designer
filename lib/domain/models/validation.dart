@@ -13,6 +13,9 @@ part 'validation.freezed.dart';
 enum ValidationSeverity { error, warning }
 
 /// A stable machine code for each rule, so UI and tests don't match on prose.
+/// The registry's server-side validator emits the SAME names (this vocabulary
+/// is part of the §7 seam), plus the parse-level gates below that the designer
+/// enforces by construction.
 enum ValidationCode {
   noStartNode,
   startNodeMissing,
@@ -28,6 +31,26 @@ enum ValidationCode {
   unknownCapability,
   duplicateNodeId,
   emptyDag,
+
+  // Server-side parse-level gates (the designer can't author these states, but
+  // the registry can report them on hand-edited/imported configs):
+  unknownNodeType,
+  invalidTerminalStatus,
+  unsupportedJoinPolicy,
+
+  /// Fallback for a server code this build doesn't know yet — the issue still
+  /// renders (message + nodeId) instead of being dropped. FAIL OPEN on display,
+  /// never on submission: the server's 422 gate is what blocks publishing.
+  serverRule,
+}
+
+/// Lenient wire parse: an unknown server code maps to [ValidationCode.serverRule]
+/// so a registry newer than this build never crashes the validation panel.
+ValidationCode validationCodeFromWire(String? code) {
+  for (final c in ValidationCode.values) {
+    if (c.name == code) return c;
+  }
+  return ValidationCode.serverRule;
 }
 
 @freezed
