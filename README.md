@@ -55,5 +55,19 @@ flutter test            # domain unit tests
 flutter run -d chrome   # boots in mock mode (USE_MOCK_BACKEND defaults true)
 ```
 
-To point at a real registry backend later:
-`--dart-define=USE_MOCK_BACKEND=false --dart-define=API_BASE_URL=https://…`
+Against the LIVE journey-registry (the platform repo's
+`docs/testing/REGISTRY_RUNBOOK.md` operates the whole seam):
+
+```bash
+flutter run -d chrome --dart-define=USE_MOCK_BACKEND=false \
+  --dart-define=API_BASE_URL=http://localhost:8104 \
+  --dart-define=REGISTRY_TOKEN=dev-registry-token
+```
+
+`test/integration/registry_live_test.dart` runs the full maker-checker
+lifecycle over real HTTP and self-skips when the registry isn't running.
+
+> Toolchain note: `flutter analyze` on an SDK older than ~3.27 reports a
+> handful of `withValues`/`scaleByDouble`/`initialValue` errors in widget
+> files — those APIs are newer than the old SDK, not real defects; build and
+> analyze on the Flutter version the repo targets (3.27+).
