@@ -1,0 +1,35 @@
+name: dag_core
+description: >-
+  Shared DAG core for the IDFC journey tooling: the §7 models + ConfigSerializer
+  (the schema-locked contract), the canvas view (pan/zoom, edges, nodes), the
+  registry dio client + actor/token plumbing, the validation vocabulary, and the
+  canonical contract fixtures. Used by BOTH apps — the (read-write) DAG Designer
+  and the (read-only) Journey Ops View.
+version: 0.1.0
+publish_to: "none"
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Networking (registry/ops clients)
+  dio: ^5.5.0
+
+  # Models / serialization (generated files are committed)
+  freezed_annotation: ^2.4.4
+  json_annotation: ^4.9.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # Codegen — only needed when regenerating the committed .freezed.dart files
+  build_runner: ^2.4.11
+  freezed: ^2.5.7
+  json_serializable: ^6.8.0
+
+  flutter_lints: ^4.0.0
