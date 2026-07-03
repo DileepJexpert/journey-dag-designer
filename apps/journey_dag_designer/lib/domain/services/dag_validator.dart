@@ -112,6 +112,23 @@ class DagValidator {
     // join.joinOn must be real, actual predecessors.
     for (final n in dag.nodes) {
       if (n is! JoinNode) continue;
+      // T2: a quorum join needs a count within [1, |joinOn|] — the engine
+      // refuses to load anything else, so flag it while authoring.
+      if (n.policy == JoinPolicy.quorum) {
+        final q = n.quorum;
+        if (q == null || q < 1 || q > n.joinOn.length) {
+          issues.add(ValidationIssue(
+            code: ValidationCode.quorumOutOfBounds,
+            severity: ValidationSeverity.error,
+            message: q == null
+                ? 'Join "${n.id}" declares quorum without a count — set n '
+                    '(1..${n.joinOn.length}).'
+                : 'Join "${n.id}" quorum($q) is out of bounds for '
+                    '${n.joinOn.length} joinOn member(s) (1 <= n <= |joinOn|).',
+            nodeId: n.id,
+          ));
+        }
+      }
       for (final dep in n.joinOn) {
         if (!byId.containsKey(dep)) {
           issues.add(ValidationIssue(

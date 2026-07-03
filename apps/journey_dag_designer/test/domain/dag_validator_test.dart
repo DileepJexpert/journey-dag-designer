@@ -164,4 +164,50 @@ void main() {
     final result = validator.validate(dag, capabilities: loanCapabilities);
     expect(result.isValid, isTrue, reason: result.errors.toString());
   });
+
+  // ---- T2: quorum bounds (mirrors registry quorumOutOfBounds + engine loader)
+
+  Dag quorumDag({required int? quorum}) => Dag(startNodeId: 'p', nodes: [
+        const DagNode.parallel(id: 'p', branches: ['a', 'b', 'c']),
+        const DagNode.task(id: 'a', capability: 'bureau', next: ['j']),
+        const DagNode.task(id: 'b', capability: 'scoring', next: ['j']),
+        const DagNode.task(id: 'c', capability: 'kyc', next: ['j']),
+        DagNode.join(
+            id: 'j',
+            joinOn: const ['a', 'b', 'c'],
+            policy: JoinPolicy.quorum,
+            quorum: quorum,
+            next: const ['e']),
+        const DagNode.terminal(id: 'e'),
+      ]);
+
+  test('quorum WITHOUT a count is flagged — the engine refuses quorum sans (n)',
+      () {
+    expect(codes(quorumDag(quorum: null)),
+        contains(ValidationCode.quorumOutOfBounds));
+  });
+
+  test('quorum out of [1, |joinOn|] is flagged', () {
+    expect(codes(quorumDag(quorum: 0)),
+        contains(ValidationCode.quorumOutOfBounds));
+    expect(codes(quorumDag(quorum: 4)),
+        contains(ValidationCode.quorumOutOfBounds));
+  });
+
+  test('a well-bounded quorum (and anyOf) validate clean', () {
+    final q2 = validator.validate(quorumDag(quorum: 2),
+        capabilities: loanCapabilities);
+    expect(q2.isValid, isTrue, reason: q2.errors.toString());
+
+    const anyOf = Dag(startNodeId: 'p', nodes: [
+      DagNode.parallel(id: 'p', branches: ['a', 'b']),
+      DagNode.task(id: 'a', capability: 'bureau', next: ['j']),
+      DagNode.task(id: 'b', capability: 'scoring', next: ['j']),
+      DagNode.join(
+          id: 'j', joinOn: ['a', 'b'], policy: JoinPolicy.anyOf, next: ['e']),
+      DagNode.terminal(id: 'e'),
+    ]);
+    final r = validator.validate(anyOf, capabilities: loanCapabilities);
+    expect(r.isValid, isTrue, reason: r.errors.toString());
+  });
 }

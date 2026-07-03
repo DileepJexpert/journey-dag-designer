@@ -26,6 +26,9 @@ enum ValidationCode {
   branchNoDefault, // §9.5: every branch needs a `default`
   joinOnUnknownPredecessor,
   joinOnNotActualPredecessor,
+  // T2: quorum(n) must have n and 1 <= n <= |joinOn| (mirrors the registry's
+  // quorumOutOfBounds and the engine's load-time validator).
+  quorumOutOfBounds,
   missingCompensation,
   waitMissingTimeout, // §9.7: every wait needs timeout + onTimeout
   unknownCapability,

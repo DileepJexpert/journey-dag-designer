@@ -329,11 +329,24 @@ class NodeInspector extends ConsumerWidget {
           value: node.policy.name,
           items: const {'allOf': 'allOf', 'anyOf': 'anyOf', 'quorum': 'quorum'},
           enabled: editable,
-          onChanged: (v) => c.replaceNode(node.copyWith(
-              policy:
-                  JoinPolicy.values.firstWhere((p) => p.name == v))),
+          onChanged: (v) {
+            final policy = JoinPolicy.values.firstWhere((p) => p.name == v);
+            // A stale count must not ride along when leaving quorum.
+            c.replaceNode(node.copyWith(
+                policy: policy,
+                quorum: policy == JoinPolicy.quorum ? node.quorum : null));
+          },
         ));
         fields.add(const SizedBox(height: 12));
+        if (node.policy == JoinPolicy.quorum) {
+          // T2: quorum needs its count — the engine refuses quorum without (n).
+          text(
+            'quorum',
+            'Quorum count n (1..${node.joinOn.length} of joinOn)',
+            node.quorum?.toString() ?? '',
+            (v) => node.copyWith(quorum: int.tryParse(v.trim())),
+          );
+        }
         edges('Join on (predecessors)', node.joinOn);
         edges('Next', node.next);
       case WaitNode():
