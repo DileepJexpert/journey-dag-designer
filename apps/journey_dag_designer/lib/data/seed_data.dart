@@ -67,6 +67,25 @@ const seedCapabilities = <Capability>[
         'handleVendorCallback',
       ]),
   Capability(key: 'echo', name: 'Echo (framework demo)', operations: ['echo']),
+  // Real backend module (P1.4 communications) — registered here for the
+  // reference file-batch drawing's email-report step.
+  Capability(
+      key: 'communications',
+      name: 'Communications',
+      domain: 'Channel',
+      operations: ['sendEmailReport']),
+  // --- DEMO scaffolding capabilities (legacy-patterns demo; platform module
+  // demo/legacy-patterns-demo). Vendors mocked; never production keys. ---
+  Capability(
+      key: 'device-financing',
+      name: 'Device Financing (DEMO scaffold)',
+      domain: 'Lending',
+      operations: ['resolveBrand', 'validate', 'block']),
+  Capability(
+      key: 'fusion-hcm',
+      name: 'Fusion HCM (DEMO scaffold)',
+      domain: 'HR',
+      operations: ['updateEmployee', 'getEmployee']),
 ];
 
 /// businessLine codes == the SFDC edge `type` values.
@@ -75,6 +94,9 @@ const seedBusinessLines = <BusinessLine>[
   BusinessLine(code: 'LAP', label: 'Loan Against Property'),
   BusinessLine(code: 'BUSINESS_LOAN', label: 'Business Loan'),
   BusinessLine(code: 'COMMERCIAL', label: 'Commercial'),
+  // Legacy-patterns demo scoping rows (demo scaffolding, not production lines).
+  BusinessLine(code: 'DEVICE_FINANCING', label: 'Device Financing (demo)'),
+  BusinessLine(code: 'HR_DEMO', label: 'HR batch (demo)'),
 ];
 
 const seedProducts = <Product>[

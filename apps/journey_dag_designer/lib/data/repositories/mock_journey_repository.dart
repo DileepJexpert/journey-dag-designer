@@ -12,6 +12,7 @@ import 'package:dag_core/dag_core.dart';
 import '../../domain/models/journey.dart';
 import '../../domain/repositories/journey_repository.dart';
 import '../../domain/services/dag_validator.dart';
+import '../demo_seed_data.dart';
 import '../seed_data.dart';
 
 class MockJourneyRepository implements JourneyRepository {
@@ -31,6 +32,17 @@ class MockJourneyRepository implements JourneyRepository {
     _journeys[autopay.id] = autopay;
     final cancel = seedCancelJourney(ts);
     _journeys[cancel.id] = cancel;
+    // Legacy-patterns demo: two runnable demo journeys (brand-as-config,
+    // per-record LWD) + two REFERENCE drafts (drawn, not built — honesty
+    // slide; the file/SFTP edge and foreach execution are census-gated).
+    for (final demo in [
+      seedDeviceFinancingJourney(ts),
+      seedEmployeeLwdJourney(ts),
+      seedReferenceFileBatchJourney(ts),
+      seedReferenceSyncReadJourney(ts),
+    ]) {
+      _journeys[demo.id] = demo;
+    }
   }
 
   final DagValidator _validator;
