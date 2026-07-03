@@ -7,6 +7,7 @@
 /// {
 ///   "journeyKey": "loan-origination",
 ///   "version": 1,
+///   "schemaVersion": 2,
 ///   "context": { "schemaRef": "loan-origination-context@1" },
 ///   "pools": { "finnone_pool": { "maxConcurrent": 20 } },
 ///   "startNodeId": "customer",
@@ -31,7 +32,12 @@ import '../models/node_policies.dart';
 class ConfigSerializer {
   const ConfigSerializer();
 
-  /// DSL schema generation stamped into the config.
+  /// DSL schema generation stamped into the config (A6: ON THE WIRE, checked
+  /// at load by every reader — this serializer and the engine's loader). A
+  /// config stamped with a generation a reader doesn't understand must REFUSE
+  /// to load, never half-parse; a config with NO stamp is a pre-A6 legacy
+  /// artifact and is accepted as this generation (published configs already in
+  /// registries keep running).
   static const int schemaVersion = 2;
 
   // ---------------------------------------------------------------------------
@@ -42,6 +48,7 @@ class ConfigSerializer {
     return {
       'journeyKey': key,
       'version': version,
+      'schemaVersion': schemaVersion,
       if (dag.contextSchemaRef != null)
         'context': {'schemaRef': dag.contextSchemaRef},
       if (dag.pools.isNotEmpty)
@@ -178,6 +185,12 @@ class ConfigSerializer {
   // ---------------------------------------------------------------------------
 
   Dag fromJson(Map<String, dynamic> json) {
+    final declared = json['schemaVersion'];
+    if (declared != null && (declared as num).toInt() != schemaVersion) {
+      throw FormatException(
+          'config declares schemaVersion $declared but this reader understands '
+          'only $schemaVersion — refusing to load (fail closed, A6)');
+    }
     final nodes = [
       for (final raw in (json['nodes'] as List? ?? const []))
         _nodeFromJson(raw as Map<String, dynamic>),

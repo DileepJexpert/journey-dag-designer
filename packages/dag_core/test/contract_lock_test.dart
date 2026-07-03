@@ -53,4 +53,27 @@ void main() {
     expect(contractFile(cancelContractPath).readAsStringSync(),
         cancelContractContents());
   });
+
+  // ---- A6: schemaVersion on the wire, checked at load ----------------------
+
+  test('A6: the contract carries schemaVersion on the wire', () {
+    expect(file.readAsStringSync(),
+        contains('"schemaVersion": ${ConfigSerializer.schemaVersion}'));
+  });
+
+  test(
+      'A6: a config stamped with an UNKNOWN schemaVersion refuses to load '
+      '(fail closed — never half-parse a future grammar)', () {
+    final json = serializer.toJson(seedLoanDag(), key: contractKey);
+    json['schemaVersion'] = ConfigSerializer.schemaVersion + 1;
+    expect(() => serializer.fromJson(json), throwsFormatException);
+  });
+
+  test(
+      'A6: a config with NO stamp is pre-A6 legacy and loads (published '
+      'configs already in registries keep running)', () {
+    final json = serializer.toJson(seedLoanDag(), key: contractKey)
+      ..remove('schemaVersion');
+    expect(serializer.fromJson(json).nodeOrNull('n_customer'), isNotNull);
+  });
 }

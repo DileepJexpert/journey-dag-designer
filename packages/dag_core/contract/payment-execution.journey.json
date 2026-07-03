@@ -1,6 +1,7 @@
 {
   "journeyKey": "payment-execution",
   "version": 1,
+  "schemaVersion": 2,
   "context": {
     "schemaRef": "payment-execution-context@1"
   },
