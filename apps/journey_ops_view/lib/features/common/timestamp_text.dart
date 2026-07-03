@@ -30,6 +30,18 @@ String formatIstFull(DateTime t) {
 
 String formatIso(DateTime t) => t.toUtc().toIso8601String();
 
+/// `12s` / `4m 05s` / `1h 02m` — wall-clock durations for run rows/headers.
+String formatDuration(Duration d) {
+  final abs = d.isNegative ? Duration.zero : d;
+  if (abs.inHours >= 1) {
+    return '${abs.inHours}h ${_two(abs.inMinutes % 60)}m';
+  }
+  if (abs.inMinutes >= 1) {
+    return '${abs.inMinutes}m ${_two(abs.inSeconds % 60)}s';
+  }
+  return '${abs.inSeconds}s';
+}
+
 class TimestampText extends StatelessWidget {
   const TimestampText(this.time, {super.key, this.style});
 

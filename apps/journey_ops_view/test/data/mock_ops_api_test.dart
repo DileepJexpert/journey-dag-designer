@@ -13,7 +13,7 @@ void main() {
   test('newest first, honest page math', () async {
     final page = await api.runs(size: 10);
     expect(page.items.first.runId, 'run-pl-001');
-    expect(page.totalItems, 25);
+    expect(page.totalItems, 26);
     expect(page.totalPages, 3);
     final page2 = await api.runs(size: 10, page: 1);
     expect(page2.items, hasLength(10));
@@ -53,5 +53,30 @@ void main() {
     expect(detail.transitions.map((t) => t.seq).toList(), [0, 1, 2, 3, 4, 5]);
     expect(detail.dlqTopicRef, 'orig.sfdc.dlq.v1');
     expect(await api.detail('nope'), isNull);
+  });
+
+  test('P2: live summaries carry the sweep deadline; terminal ones do not',
+      () async {
+    final live = (await api.search('run-pl-001')).single;
+    expect(live.sweepDeadline, live.startedAt.add(const Duration(minutes: 15)),
+        reason: 'mock mirrors the server: startedAt + run budget, live only');
+    expect(live.duration, isNull);
+
+    final done = (await api.search('run-pl-003')).single;
+    expect(done.sweepDeadline, isNull);
+    expect(done.duration, const Duration(minutes: 4));
+  });
+
+  test('P2: detail carries node stats and the compensation saga state',
+      () async {
+    final saga = (await api.detail('run-pl-008'))!;
+    expect(saga.compensationOf, 'n_kyc');
+    expect(saga.compensationPending, ['n_customer']);
+    expect(saga.statOf('n_kyc')!.failureClass, 'PERMANENT');
+
+    final failed = (await api.detail('run-pl-006'))!;
+    expect(failed.statOf('n_bureau')!.attempts, 3);
+    expect(failed.statOf('n_bureau')!.failureClass, 'TRANSIENT');
+    expect(failed.compensationOf, isNull);
   });
 }

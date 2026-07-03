@@ -92,6 +92,7 @@ class MockOpsApi implements OpsApi {
         notificationId: r.notificationId,
         sfdcRecordId: r.sfdcRecordId,
         stuck: r.stuck,
+        sweepDeadline: r.sweepDeadline,
       );
 
   // ---- fixtures ------------------------------------------------------------
@@ -115,6 +116,8 @@ class MockOpsApi implements OpsApi {
         status: OpsStatus.running,
         sfdcNotified: SfdcNotified.none,
         startedAt: now.subtract(const Duration(minutes: 2)),
+        sweepDeadline: now.subtract(const Duration(minutes: 2))
+            .add(const Duration(minutes: 15)),
         correlationId: 'corr-001',
         notificationId: 'NTF-001',
         sfdcRecordId: 'SFDC-9001',
@@ -136,6 +139,9 @@ class MockOpsApi implements OpsApi {
         notificationId: 'NTF-002',
         sfdcRecordId: 'SFDC-9002',
         stuck: true,
+        sweepDeadline: now.subtract(const Duration(minutes: 40))
+            .add(const Duration(minutes: 15)),
+        nodeStats: const [NodeStat(nodeId: 'n_kyc', attempts: 1)],
         transitions: [
           t(0, 'n_customer', 'DISPATCHED', 40),
           t(1, 'n_customer', 'COMPLETED', 39),
@@ -209,6 +215,9 @@ class MockOpsApi implements OpsApi {
         notificationId: 'NTF-005',
         sfdcRecordId: 'SFDC-9005',
         dlqTopicRef: 'orig.sfdc.dlq.v1',
+        nodeStats: const [
+          NodeStat(nodeId: 'n_kyc', attempts: 1, failureClass: 'PERMANENT'),
+        ],
         transitions: [
           t(0, 'n_customer', 'DISPATCHED', 480),
           t(1, 'n_customer', 'COMPLETED', 480),
@@ -231,6 +240,9 @@ class MockOpsApi implements OpsApi {
         notificationId: 'NTF-006',
         sfdcRecordId: 'SFDC-9004', // same SFDC record as run-pl-004: related runs
         dlqTopicRef: 'orig.sfdc.dlq.v1',
+        nodeStats: const [
+          NodeStat(nodeId: 'n_bureau', attempts: 3, failureClass: 'TRANSIENT'),
+        ],
         transitions: [
           t(0, 'n_customer', 'DISPATCHED', 60),
           t(1, 'n_customer', 'COMPLETED', 60),
@@ -265,6 +277,35 @@ class MockOpsApi implements OpsApi {
         ],
       ),
     ];
+
+    // COMPENSATING (T2 saga): decision already SENT, undo work in flight.
+    // The wire keeps the fixed vocabulary (RUNNING band) — the saga fields
+    // and the '#comp' timeline rows tell the story.
+    runs.add(RunDetail(
+      runId: 'run-pl-008',
+      journeyKey: 'loan-origination',
+      journeyVersion: 1,
+      status: OpsStatus.running,
+      sfdcNotified: SfdcNotified.sent,
+      startedAt: now.subtract(const Duration(minutes: 6)),
+      sweepDeadline: now.subtract(const Duration(minutes: 6))
+          .add(const Duration(minutes: 15)),
+      correlationId: 'corr-008',
+      notificationId: 'NTF-008',
+      sfdcRecordId: 'SFDC-9008',
+      compensationOf: 'n_kyc',
+      compensationPending: const ['n_customer'],
+      nodeStats: const [
+        NodeStat(nodeId: 'n_kyc', attempts: 1, failureClass: 'PERMANENT'),
+      ],
+      transitions: [
+        t(0, 'n_customer', 'DISPATCHED', 6),
+        t(1, 'n_customer', 'COMPLETED', 6),
+        t(2, 'n_kyc', 'DISPATCHED', 5),
+        t(3, 'n_kyc', 'FAILED', 5),
+        t(4, 'n_customer#comp', 'DISPATCHED', 4),
+      ],
+    ));
 
     // Pagination filler: completed runs spread over the past week.
     for (var i = 0; i < 18; i++) {

@@ -129,13 +129,14 @@ class _RunDetailBodyState extends ConsumerState<_RunDetailBody> {
 
 // ---- header -----------------------------------------------------------------
 
-class _HeaderCard extends StatelessWidget {
+class _HeaderCard extends ConsumerWidget {
   const _HeaderCard({required this.run});
 
   final RunDetail run;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final now = ref.watch(nowProvider)();
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -184,6 +185,33 @@ class _HeaderCard extends StatelessWidget {
                 ],
               ],
             ),
+            // Tier-1 wall-clock line: total duration (ended) or age +
+            // time-in-current-node (live), plus WHEN the sweeper will act.
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: _liveline(now),
+            ),
+            if (run.compensationOf != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Row(
+                  children: [
+                    const Icon(Icons.undo, size: 15, color: Color(0xFFE0A100)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        run.compensationPending.isEmpty
+                            ? 'Compensation for the failure at ${run.compensationOf} is COMPLETE.'
+                            : 'COMPENSATING the failure at ${run.compensationOf} — '
+                                'still undoing: ${run.compensationPending.join(', ')} '
+                                '(decision already sent to the channel).',
+                        style: const TextStyle(
+                            fontSize: 12, color: Color(0xFFE0A100)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             if (run.terminalNodeId != null)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
@@ -220,6 +248,29 @@ class _HeaderCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+extension on _HeaderCard {
+  Widget _liveline(DateTime now) {
+    const style = TextStyle(fontSize: 12, color: Colors.white70);
+    if (run.endedAt != null) {
+      return Text('took ${formatDuration(run.duration!)}', style: style);
+    }
+    final parts = <String>['live for ${formatDuration(now.difference(run.startedAt))}'];
+    if (run.transitions.isNotEmpty) {
+      final last = run.transitions.last;
+      parts.add('in ${last.nodeId} for '
+          '${formatDuration(now.difference(last.at))}');
+    }
+    final deadline = run.sweepDeadline;
+    if (deadline != null) {
+      parts.add(deadline.isAfter(now)
+          ? 'sweeper acts at ${formatIstShort(deadline)} '
+              '(in ${formatDuration(deadline.difference(now))})'
+          : 'sweeper OVERDUE — force-fail imminent');
+    }
+    return Text(parts.join('  ·  '), style: style);
   }
 }
 
@@ -325,6 +376,26 @@ class _GraphCard extends StatelessWidget {
     );
   }
 
+  /// OPS P2: enrich the run-state badge with the node's stats — the failure
+  /// CLASS on failed nodes ("failed · PERMANENT") and the retry ladder on
+  /// re-dispatched ones ("active · try 2/3" when the pinned graph declares
+  /// maxAttempts; "try 2" otherwise).
+  NodeOverlay? _decorated(DagNode node, NodeOverlay base) {
+    final stat = run.statOf(node.id);
+    if (stat == null) {
+      return base;
+    }
+    var badge = base.badge;
+    if (badge == 'failed' && stat.failureClass != null) {
+      badge = 'failed · ${stat.failureClass}';
+    } else if (stat.attempts > 1) {
+      final max = node is TaskNode ? node.policies?.retry?.maxAttempts : null;
+      final tries = max == null ? 'try ${stat.attempts}' : 'try ${stat.attempts}/$max';
+      badge = badge == null ? tries : '$badge · $tries';
+    }
+    return NodeOverlay(accent: base.accent, badge: badge, dimmed: base.dimmed);
+  }
+
   Widget _buildContent(BuildContext context) {
     if (loading) {
       return const SizedBox(
@@ -407,8 +478,10 @@ class _GraphCard extends StatelessWidget {
             ),
             child: DagCanvasView(
               dag: graph.dag,
-              nodeOverlay: (node) => StatusVisuals.overlayOf(
-                  overlay.states[node.id] ?? NodeRunState.notReached),
+              nodeOverlay: (node) => _decorated(
+                  node,
+                  StatusVisuals.overlayOf(
+                      overlay.states[node.id] ?? NodeRunState.notReached)),
             ),
           ),
         ),
@@ -445,11 +518,13 @@ class _TimelineCard extends StatelessWidget {
             if (transitions.isEmpty)
               const Text('No transitions recorded yet.',
                   style: TextStyle(fontSize: 12)),
-            for (final t in transitions)
+            for (var i = 0; i < transitions.length; i++)
               _TransitionRow(
-                entry: t,
-                orphan:
-                    graphNodeIds != null && !graphNodeIds!.contains(t.nodeId),
+                entry: transitions[i],
+                previousAt: i == 0 ? null : transitions[i - 1].at,
+                stat: run.statOf(transitions[i].nodeId),
+                orphan: graphNodeIds != null &&
+                    !graphNodeIds!.contains(transitions[i].nodeId),
               ),
           ],
         ),
@@ -459,13 +534,24 @@ class _TimelineCard extends StatelessWidget {
 }
 
 class _TransitionRow extends StatelessWidget {
-  const _TransitionRow({required this.entry, required this.orphan});
+  const _TransitionRow({
+    required this.entry,
+    required this.orphan,
+    this.previousAt,
+    this.stat,
+  });
 
   final TransitionEntry entry;
 
   /// True when the rendered graph doesn't know this nodeId — the row wears a
   /// warn chip instead of being dropped (the history is authoritative).
   final bool orphan;
+
+  /// Tier-1 latency profile: the previous row's timestamp -> "+90s" chip.
+  final DateTime? previousAt;
+
+  /// OPS P2 stats for this row's node (attempts / failure class), if any.
+  final NodeStat? stat;
 
   @override
   Widget build(BuildContext context) {
@@ -490,6 +576,20 @@ class _TransitionRow extends StatelessWidget {
           const SizedBox(width: 6),
           Text(entry.status.toLowerCase(),
               style: TextStyle(fontSize: 11, color: color)),
+          if (entry.status == 'FAILED' && stat?.failureClass != null) ...[
+            const SizedBox(width: 6),
+            Text(stat!.failureClass!,
+                style: const TextStyle(
+                    fontSize: 10,
+                    color: Color(0xFFD64545),
+                    fontWeight: FontWeight.w600)),
+          ],
+          if (entry.status == 'DISPATCHED' && (stat?.attempts ?? 0) > 1) ...[
+            const SizedBox(width: 6),
+            Text('attempts ${stat!.attempts}',
+                style:
+                    const TextStyle(fontSize: 10, color: Colors.white54)),
+          ],
           if (orphan) ...[
             const SizedBox(width: 6),
             Tooltip(
@@ -528,6 +628,11 @@ class _TransitionRow extends StatelessWidget {
             ),
           ],
           const Spacer(),
+          if (previousAt != null) ...[
+            Text('+${formatDuration(entry.at.difference(previousAt!))}',
+                style: const TextStyle(fontSize: 10, color: Colors.white38)),
+            const SizedBox(width: 8),
+          ],
           TimestampText(entry.at, style: const TextStyle(fontSize: 11)),
         ],
       ),

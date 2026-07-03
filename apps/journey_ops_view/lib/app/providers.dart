@@ -11,6 +11,11 @@ import '../data/mock_ops_api.dart';
 import '../data/ops_api.dart';
 import 'env.dart';
 
+/// Wall clock for the Tier-1 live computations (time-in-node, sweeper
+/// countdowns, ages). Tests override this with a fixed instant so the
+/// arithmetic is deterministic.
+final nowProvider = Provider<DateTime Function()>((ref) => DateTime.now);
+
 /// The ASSERTED operator id (X-User-Id on every request). Null until the
 /// identity gate collects it (or OPS_USER is passed at build time).
 final opsActorProvider = StateProvider<String?>(

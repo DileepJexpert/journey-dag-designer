@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../domain/models.dart';
 import '../../domain/ops_status.dart';
+import '../../data/ops_api.dart';
 import '../../domain/triage.dart';
 import '../common/status_visuals.dart';
 import '../common/timestamp_text.dart';
@@ -59,6 +60,10 @@ class _RunsScreenState extends ConsumerState<RunsScreen> {
   RunsPage? _data;
   List<RunSummary>? _searchResults;
   List<RunSummary>? _triageResults;
+  /// Tier-1 status tiles: label -> count, refreshed with every poll via
+  /// size-1 totalItems reads (v1 mechanism — a counts endpoint replaces it
+  /// if tile count grows; do not let the hack calcify).
+  Map<RunsFilter, int>? _counts;
   String? _activeSearch;
   bool _loading = false;
   String? _refreshError;
@@ -112,6 +117,8 @@ class _RunsScreenState extends ConsumerState<RunsScreen> {
         if (!mounted) return;
         setState(() => _data = data);
       }
+      _counts = await _fetchCounts(api);
+      if (!mounted) return;
       _lastRefreshed = DateTime.now();
       _refreshError = null;
       _currentPoll = pollInterval; // success resets the backoff
@@ -127,6 +134,21 @@ class _RunsScreenState extends ConsumerState<RunsScreen> {
         _schedulePoll();
       }
     }
+  }
+
+  /// One size-1 page per tile: totalItems is the count.
+  static Future<Map<RunsFilter, int>> _fetchCounts(OpsApi api) async {
+    Future<int> count({OpsStatus? status, bool stuckOnly = false}) async =>
+        (await api.runs(status: status, stuckOnly: stuckOnly, size: 1))
+            .totalItems;
+    return {
+      RunsFilter.running: await count(status: OpsStatus.running),
+      RunsFilter.stuck: await count(stuckOnly: true),
+      RunsFilter.failedPending:
+          await count(status: OpsStatus.failedNotifyPending),
+      RunsFilter.failedNotified:
+          await count(status: OpsStatus.failedSfdcNotified),
+    };
   }
 
   void _setFilter(RunsFilter f) {
@@ -218,6 +240,34 @@ class _RunsScreenState extends ConsumerState<RunsScreen> {
               onSubmitted: _submitSearch,
             ),
           ),
+          if (_counts != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+              child: Row(
+                children: [
+                  _StatusTile(
+                      label: 'Running',
+                      count: _counts![RunsFilter.running] ?? 0,
+                      color: const Color(0xFF4C7DFF),
+                      onTap: () => _setFilter(RunsFilter.running)),
+                  _StatusTile(
+                      label: 'Stuck',
+                      count: _counts![RunsFilter.stuck] ?? 0,
+                      color: const Color(0xFFE0A100),
+                      onTap: () => _setFilter(RunsFilter.stuck)),
+                  _StatusTile(
+                      label: 'Notify-pending',
+                      count: _counts![RunsFilter.failedPending] ?? 0,
+                      color: const Color(0xFFD64545),
+                      onTap: () => _setFilter(RunsFilter.failedPending)),
+                  _StatusTile(
+                      label: 'Failed-notified',
+                      count: _counts![RunsFilter.failedNotified] ?? 0,
+                      color: const Color(0xFFB05454),
+                      onTap: () => _setFilter(RunsFilter.failedNotified)),
+                ],
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             child: Align(
@@ -339,6 +389,8 @@ class _RunTile extends StatelessWidget {
             const Text(' · ended ', style: TextStyle(fontSize: 11)),
             TimestampText(run.endedAt!,
                 style: const TextStyle(fontSize: 11)),
+            Text(' · took ${formatDuration(run.duration!)}',
+                style: const TextStyle(fontSize: 11, color: Colors.white54)),
           ],
         ],
       ),
@@ -346,6 +398,54 @@ class _RunTile extends StatelessWidget {
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => RunDetailScreen(runId: run.runId),
+        ),
+      ),
+    );
+  }
+}
+
+/// Tier-1 count tile: tap = apply that filter.
+class _StatusTile extends StatelessWidget {
+  const _StatusTile({
+    required this.label,
+    required this.count,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String label;
+  final int count;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            decoration: BoxDecoration(
+              color: color.withAlpha(26),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: color.withAlpha(115)),
+            ),
+            child: Column(
+              children: [
+                Text('$count',
+                    style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: color)),
+                Text(label,
+                    style:
+                        const TextStyle(fontSize: 10, color: Colors.white70)),
+              ],
+            ),
+          ),
         ),
       ),
     );

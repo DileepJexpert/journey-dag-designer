@@ -31,7 +31,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('run-pl-001'), findsOneWidget); // newest run on top
-    expect(find.text('Page 1 of 2 · 25 runs'), findsOneWidget);
+    expect(find.text('Page 1 of 2 · 26 runs'), findsOneWidget);
     expect(find.textContaining('Last refreshed'), findsOneWidget);
 
     await _teardown(tester);
@@ -91,7 +91,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.chevron_right).last);
     await tester.pumpAndSettle();
 
-    expect(find.text('Page 2 of 2 · 25 runs'), findsOneWidget);
+    expect(find.text('Page 2 of 2 · 26 runs'), findsOneWidget);
     expect(find.text('run-pl-001'), findsNothing);
 
     await _teardown(tester);

@@ -365,21 +365,25 @@ class _PositionedNode extends StatelessWidget {
                                 ),
                               ),
                             if (overlay?.badge != null)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 4),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 4, vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: accent.withAlpha(56),
-                                    borderRadius: BorderRadius.circular(3),
-                                    border: Border.all(color: accent),
+                              Flexible(
+                                child: Padding(
+                                  padding: const EdgeInsets.only(left: 4),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 4, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: accent.withAlpha(56),
+                                      borderRadius: BorderRadius.circular(3),
+                                      border: Border.all(color: accent),
+                                    ),
+                                    child: Text(overlay!.badge!,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                            fontSize: 8.5,
+                                            color: accent,
+                                            fontWeight: FontWeight.bold)),
                                   ),
-                                  child: Text(overlay!.badge!,
-                                      style: TextStyle(
-                                          fontSize: 8.5,
-                                          color: accent,
-                                          fontWeight: FontWeight.bold)),
                                 ),
                               ),
                           ],

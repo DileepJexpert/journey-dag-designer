@@ -18,6 +18,7 @@ class RunSummary {
     this.notificationId,
     this.sfdcRecordId,
     this.stuck = false,
+    this.sweepDeadline,
   });
 
   final String runId;
@@ -30,6 +31,13 @@ class RunSummary {
   final String? notificationId;
   final String? sfdcRecordId;
   final bool stuck;
+
+  /// OPS P2: when the liveness sweeper will force-fail this run (live runs
+  /// only; null once terminal) — "the system acts on its own at ⟨t⟩".
+  final DateTime? sweepDeadline;
+
+  /// Wall-clock duration for ended runs; null while live.
+  Duration? get duration => endedAt?.difference(startedAt);
 
   factory RunSummary.fromJson(Map<String, dynamic> json) => RunSummary(
         runId: json['runId'] as String,
@@ -44,6 +52,26 @@ class RunSummary {
         notificationId: json['notificationId'] as String?,
         sfdcRecordId: json['sfdcRecordId'] as String?,
         stuck: json['stuck'] as bool? ?? false,
+        sweepDeadline: json['sweepDeadline'] == null
+            ? null
+            : DateTime.parse(json['sweepDeadline'] as String),
+      );
+}
+
+/// OPS P2: per-node execution stats — dispatch attempts (the T2 retry ladder)
+/// and, for terminally-failed nodes, the failure-class ENUM NAME
+/// (TRANSIENT / PERMANENT / AMBIGUOUS / BREAKER_OPEN). Names only, never text.
+class NodeStat {
+  const NodeStat({required this.nodeId, required this.attempts, this.failureClass});
+
+  final String nodeId;
+  final int attempts;
+  final String? failureClass;
+
+  factory NodeStat.fromJson(Map<String, dynamic> json) => NodeStat(
+        nodeId: json['nodeId'] as String,
+        attempts: (json['attempts'] as num?)?.toInt() ?? 0,
+        failureClass: json['failureClass'] as String?,
       );
 }
 
@@ -91,6 +119,10 @@ class RunDetail {
     this.transitions = const [],
     this.dlqTopicRef,
     this.stuck = false,
+    this.sweepDeadline,
+    this.nodeStats = const [],
+    this.compensationOf,
+    this.compensationPending = const [],
   });
 
   final String runId;
@@ -110,6 +142,27 @@ class RunDetail {
   /// Pointer ONLY (D13): the DLQ topic name as a starting point for Brod.
   final String? dlqTopicRef;
   final bool stuck;
+
+  /// OPS P2: when the sweeper will act on this run (live only; null terminal).
+  final DateTime? sweepDeadline;
+
+  /// OPS P2: per-node attempts + failure classes (empty for pre-P2 records).
+  final List<NodeStat> nodeStats;
+
+  /// OPS P2: the node whose failure started the compensation saga, and the
+  /// compensation node ids still to be undone (head = in flight).
+  final String? compensationOf;
+  final List<String> compensationPending;
+
+  /// Wall-clock duration for ended runs; null while live.
+  Duration? get duration => endedAt?.difference(startedAt);
+
+  NodeStat? statOf(String nodeId) {
+    for (final s in nodeStats) {
+      if (s.nodeId == nodeId) return s;
+    }
+    return null;
+  }
 
   /// A run is terminal when it has ended — nothing on it is "active" anymore.
   bool get isTerminal => status != OpsStatus.running;
@@ -138,6 +191,17 @@ class RunDetail {
             .toList(),
         dlqTopicRef: json['dlqTopicRef'] as String?,
         stuck: json['stuck'] as bool? ?? false,
+        sweepDeadline: json['sweepDeadline'] == null
+            ? null
+            : DateTime.parse(json['sweepDeadline'] as String),
+        nodeStats: (json['nodeStats'] as List<dynamic>? ?? const [])
+            .map((n) => NodeStat.fromJson(n as Map<String, dynamic>))
+            .toList(),
+        compensationOf: json['compensationOf'] as String?,
+        compensationPending:
+            (json['compensationPending'] as List<dynamic>? ?? const [])
+                .map((e) => e as String)
+                .toList(),
       );
 }
 
