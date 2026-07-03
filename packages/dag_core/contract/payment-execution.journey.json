@@ -1,0 +1,129 @@
+{
+  "journeyKey": "payment-execution",
+  "version": 1,
+  "schemaVersion": 2,
+  "context": {
+    "schemaRef": "payment-execution-context@1"
+  },
+  "startNodeId": "n_validate",
+  "nodes": [
+    {
+      "id": "n_validate",
+      "type": "task",
+      "capability": "payments",
+      "operation": "validate",
+      "output": "context.validation",
+      "next": [
+        "n_route"
+      ]
+    },
+    {
+      "id": "n_route",
+      "type": "branch",
+      "arms": [
+        {
+          "when": "context.request.rail == 'IMPS'",
+          "next": "n_imps"
+        },
+        {
+          "when": "context.request.rail == 'UPI_MANDATE'",
+          "next": "n_mandate"
+        },
+        {
+          "when": "context.request.rail == 'BILL_PAY'",
+          "next": "n_bill"
+        }
+      ],
+      "default": "n_unsupported"
+    },
+    {
+      "id": "n_imps",
+      "type": "task",
+      "capability": "payments",
+      "operation": "executeImps",
+      "next": [
+        "n_confirm"
+      ]
+    },
+    {
+      "id": "n_mandate",
+      "type": "task",
+      "capability": "payments",
+      "operation": "executeMandate",
+      "next": [
+        "n_confirm"
+      ]
+    },
+    {
+      "id": "n_bill",
+      "type": "task",
+      "capability": "payments",
+      "operation": "executeBillPay",
+      "next": [
+        "n_confirm"
+      ]
+    },
+    {
+      "id": "n_confirm",
+      "type": "task",
+      "capability": "payments",
+      "operation": "confirm",
+      "output": "context.confirmation",
+      "next": [
+        "n_notify"
+      ]
+    },
+    {
+      "id": "n_notify",
+      "type": "terminal",
+      "action": "notify_channel",
+      "emit": [
+        "PaymentExecuted"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "n_unsupported",
+      "type": "terminal",
+      "action": "notify_channel",
+      "emit": [
+        "PaymentRailUnsupported"
+      ],
+      "status": "rejected"
+    }
+  ],
+  "layout": {
+    "n_validate": {
+      "x": 80.0,
+      "y": 220.0
+    },
+    "n_route": {
+      "x": 280.0,
+      "y": 220.0
+    },
+    "n_imps": {
+      "x": 500.0,
+      "y": 100.0
+    },
+    "n_mandate": {
+      "x": 500.0,
+      "y": 220.0
+    },
+    "n_bill": {
+      "x": 500.0,
+      "y": 340.0
+    },
+    "n_confirm": {
+      "x": 720.0,
+      "y": 220.0
+    },
+    "n_notify": {
+      "x": 920.0,
+      "y": 220.0
+    },
+    "n_unsupported": {
+      "x": 500.0,
+      "y": 460.0
+    }
+  }
+}

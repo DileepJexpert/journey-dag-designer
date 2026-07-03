@@ -1,0 +1,70 @@
+# A5: the designer-repo gate. The FULL suite of every workspace package runs on
+# every push/PR (the NUL-byte lesson: a test that never runs proves nothing),
+# plus the contract fixture LOCK-CHECK: regenerating the shared contracts must
+# produce a zero diff — schema drift fails CI here and the engine's loader test
+# fails in the platform repo, so the two sides can only move in lockstep.
+name: ci
+
+on:
+  push:
+    branches: ["main", "claude/**"]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dag-core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: packages/dag_core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - name: Contract fixture lock-check (regeneration must be a zero diff)
+        run: |
+          dart run tool/emit_contract.dart
+          git diff --exit-code -- contract/
+
+  designer-app:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/journey_dag_designer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - name: Full designer suite
+        run: flutter test
+
+  ops-view:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/journey_ops_view
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - name: Full ops view suite
+        run: flutter test
