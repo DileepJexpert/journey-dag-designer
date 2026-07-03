@@ -6,6 +6,12 @@
 /// RED-proof: flipping `StatusVisuals.colorOf(completedDeclined)` to the
 /// failure color (or its icon to the failure icon) turns this file red —
 /// exercised during development and recorded at the P1b gate.
+///
+/// The int channel getters (alpha/red/green/blue) are the only Color API that
+/// exists across the workspace's full Flutter range (3.22 floor .. current
+/// stable, where they are deprecated in favor of the double .a/.r/.g/.b that
+/// the floor doesn't have). Deprecated-but-working beats unportable:
+// ignore_for_file: deprecated_member_use
 library;
 
 import 'package:flutter/material.dart';
