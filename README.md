@@ -17,15 +17,34 @@ melos, no pub workspace feature):
 
 ```
 apps/journey_dag_designer/   the Designer app (editor, approvals, live registry client)
+apps/journey_ops_view/       READ-ONLY ops console: runs list (triage/search/poll),
+                             run detail with the PINNED version's graph overlaid
+                             (completed/active/failed/notReached), timeline, DLQ ref
 packages/dag_core/           SHARED read layer: Dag/DagNode models, ConfigSerializer,
                              contract fixtures + lock test, presentational DagCanvasView,
                              dio client, status color tokens
 ```
 
-`dag_core` exists so the read-only **Journey Ops View** (`apps/journey_ops_view`,
-Ops View build) renders journeys with the *same* models, serializer and canvas
-the Designer authors with — one schema, one drawing surface. It declares
-`flutter: >=3.22` and deliberately uses only version-stable framework APIs.
+`dag_core` exists so the read-only **Journey Ops View** renders journeys with
+the *same* models, serializer and canvas the Designer authors with — one
+schema, one drawing surface. It declares `flutter: >=3.22` and deliberately
+uses only version-stable framework APIs.
+
+The ops view boots against seeded mocks by default; run it live with:
+
+```bash
+cd apps/journey_ops_view
+flutter run -d chrome --dart-define=USE_MOCK_OPS_API=false \
+  --dart-define=OPS_API_BASE_URL=http://localhost:8082 \
+  --dart-define=OPS_TOKEN=dev-ops-token \
+  --dart-define=REGISTRY_BASE_URL=http://localhost:8104 \
+  --dart-define=REGISTRY_TOKEN=dev-registry-token
+```
+
+It talks ONLY to the engine's audited `/ops` read window (X-Ops-Token +
+asserted X-User-Id; the bank rule — humans never read the run store directly)
+plus the registry's published-version endpoints for graph rendering. It
+mutates nothing and displays ids only, never payloads.
 
 The **schema contract** with the engine lives in `packages/dag_core/contract/`
 (`*.journey.json`), locked by `packages/dag_core/test/contract_lock_test.dart`

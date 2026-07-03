@@ -1,0 +1,36 @@
+name: journey_ops_view
+description: >-
+  Journey Ops View — READ-ONLY Temporal-style operations console for the IDFC
+  integration platform. Humans see run state ONLY through the audited ops API;
+  this app mutates nothing, displays no payloads, and renders each run against
+  the journey version it is pinned to.
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # The shared DAG core (models, serializer, canvas) — same drawing surface
+  # and schema contract as the Designer.
+  dag_core:
+    path: ../../packages/dag_core
+
+  # State / DI
+  flutter_riverpod: ^2.5.1
+
+  # Networking
+  dio: ^5.5.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

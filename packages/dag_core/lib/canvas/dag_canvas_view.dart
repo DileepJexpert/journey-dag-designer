@@ -22,6 +22,24 @@ import '../theme/status_colors.dart';
 const double _nodeW = 168;
 const double _nodeH = 66;
 
+/// Per-node RUN-STATE decoration for the read-only Ops overlay (Ops View C.2):
+/// the host app computes run state (completed/active/failed/notReached) from
+/// the audited ops API and hands the canvas pure visuals — the canvas itself
+/// knows nothing about runs. All fields optional; a node with no overlay
+/// renders exactly as in the Designer.
+class NodeOverlay {
+  const NodeOverlay({this.accent, this.badge, this.dimmed = false});
+
+  /// Overrides the node-kind accent (stripe + border tint).
+  final Color? accent;
+
+  /// Small status chip rendered next to the label (e.g. "failed", "active").
+  final String? badge;
+
+  /// notReached: fades the whole node so the taken path pops.
+  final bool dimmed;
+}
+
 /// Default node label when the host app supplies no capability-aware labeler.
 String defaultNodeLabel(DagNode node) => switch (node) {
       TaskNode(:final capability) => capability,
@@ -44,6 +62,7 @@ class DagCanvasView extends StatefulWidget {
     this.invalidNodeIds = const <String>{},
     this.editable = false,
     this.nodeLabel,
+    this.nodeOverlay,
     this.onSelect,
     this.onMoveNode,
     this.onConnect,
@@ -58,6 +77,9 @@ class DagCanvasView extends StatefulWidget {
   final bool editable;
 
   final String Function(DagNode node)? nodeLabel;
+
+  /// Optional run-state decoration per node (Ops overlay). Null = plain render.
+  final NodeOverlay? Function(DagNode node)? nodeOverlay;
   final ValueChanged<String?>? onSelect;
   final void Function(String nodeId, double x, double y)? onMoveNode;
   final void Function(String fromId, String toId)? onConnect;
@@ -135,6 +157,7 @@ class _DagCanvasViewState extends State<DagCanvasView> {
                       layout:
                           dag.layout[node.id] ?? const NodeLayout(x: 0, y: 0),
                       label: label(node),
+                      overlay: widget.nodeOverlay?.call(node),
                       selected: widget.selectedNodeId == node.id,
                       isStart: dag.startNodeId == node.id,
                       hasError: widget.invalidNodeIds.contains(node.id),
@@ -217,6 +240,7 @@ class _PositionedNode extends StatelessWidget {
     required this.node,
     required this.layout,
     required this.label,
+    required this.overlay,
     required this.selected,
     required this.isStart,
     required this.hasError,
@@ -231,6 +255,7 @@ class _PositionedNode extends StatelessWidget {
   final DagNode node;
   final NodeLayout layout;
   final String label;
+  final NodeOverlay? overlay;
   final bool selected;
   final bool isStart;
   final bool hasError;
@@ -255,25 +280,23 @@ class _PositionedNode extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final accent = switch (node) {
+    final kindAccent = switch (node) {
       TaskNode() => StatusColors.pending,
       BranchNode() || ParallelNode() || JoinNode() => StatusColors.draft,
       WaitNode() || TimerNode() || HumanNode() => const Color(0xFF8A63D2),
       ForeachNode() || SubjourneyNode() => const Color(0xFF1F9E8F),
       TerminalNode() => StatusColors.published,
     };
+    final accent = overlay?.accent ?? kindAccent;
     final borderColor = hasError
         ? StatusColors.rejected
         : isConnectSource
             ? StatusColors.pending
             : selected
                 ? scheme.primary
-                : accent.withAlpha(153);
+                : accent.withAlpha(overlay?.accent != null ? 255 : 153);
 
-    return Positioned(
-      left: layout.x,
-      top: layout.y,
-      child: GestureDetector(
+    Widget positioned = GestureDetector(
         onTap: onTap,
         onPanUpdate: onDrag == null ? null : (d) => onDrag!(d.delta),
         child: MouseRegion(
@@ -341,6 +364,24 @@ class _PositionedNode extends StatelessWidget {
                                   ),
                                 ),
                               ),
+                            if (overlay?.badge != null)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 4),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 4, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: accent.withAlpha(56),
+                                    borderRadius: BorderRadius.circular(3),
+                                    border: Border.all(color: accent),
+                                  ),
+                                  child: Text(overlay!.badge!,
+                                      style: TextStyle(
+                                          fontSize: 8.5,
+                                          color: accent,
+                                          fontWeight: FontWeight.bold)),
+                                ),
+                              ),
                           ],
                         ),
                         Text(node.id,
@@ -369,8 +410,12 @@ class _PositionedNode extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
+      );
+
+    if (overlay?.dimmed ?? false) {
+      positioned = Opacity(opacity: 0.35, child: positioned);
+    }
+    return Positioned(left: layout.x, top: layout.y, child: positioned);
   }
 }
 
