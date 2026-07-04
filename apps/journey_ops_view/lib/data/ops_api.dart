@@ -31,4 +31,7 @@ abstract interface class OpsApi {
 
   /// GET /ops/runs/{runId} — null when unknown (404).
   Future<RunDetail?> detail(String runId);
+
+  /// GET /ops/metrics — per-journey aggregate (Temporal-style analytics).
+  Future<OpsMetrics> metrics();
 }

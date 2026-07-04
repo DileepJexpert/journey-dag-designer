@@ -230,3 +230,65 @@ class RunsPage {
         totalPages: (json['totalPages'] as num).toInt(),
       );
 }
+
+/// GET /ops/metrics — per-journey aggregate (Temporal-style "Workflows"
+/// analytics). RAW counts + duration percentiles on the wire; rates are derived
+/// here so no non-id number crosses the no-payload boundary.
+class JourneyMetric {
+  const JourneyMetric({
+    required this.journeyKey,
+    required this.total,
+    required this.running,
+    required this.completedApproved,
+    required this.completedDeclined,
+    required this.failed,
+    required this.stuck,
+    required this.startedLast24h,
+    this.p50Millis,
+    this.p95Millis,
+  });
+
+  final String journeyKey;
+  final int total;
+  final int running;
+  final int completedApproved;
+  final int completedDeclined;
+  final int failed;
+  final int stuck;
+  final int startedLast24h;
+  final int? p50Millis;
+  final int? p95Millis;
+
+  int get terminal => completedApproved + completedDeclined + failed;
+  double get approvalRate => terminal == 0 ? 0 : completedApproved / terminal;
+  double get failureRate => terminal == 0 ? 0 : failed / terminal;
+  Duration? get p50 => p50Millis == null ? null : Duration(milliseconds: p50Millis!);
+  Duration? get p95 => p95Millis == null ? null : Duration(milliseconds: p95Millis!);
+
+  factory JourneyMetric.fromJson(Map<String, dynamic> j) => JourneyMetric(
+        journeyKey: j['journeyKey'] as String,
+        total: (j['total'] as num).toInt(),
+        running: (j['running'] as num).toInt(),
+        completedApproved: (j['completedApproved'] as num).toInt(),
+        completedDeclined: (j['completedDeclined'] as num).toInt(),
+        failed: (j['failed'] as num).toInt(),
+        stuck: (j['stuck'] as num).toInt(),
+        startedLast24h: (j['startedLast24h'] as num).toInt(),
+        p50Millis: (j['p50Millis'] as num?)?.toInt(),
+        p95Millis: (j['p95Millis'] as num?)?.toInt(),
+      );
+}
+
+class OpsMetrics {
+  const OpsMetrics({required this.generatedAt, required this.journeys});
+
+  final DateTime generatedAt;
+  final List<JourneyMetric> journeys;
+
+  factory OpsMetrics.fromJson(Map<String, dynamic> j) => OpsMetrics(
+        generatedAt: DateTime.parse(j['generatedAt'] as String),
+        journeys: (j['journeys'] as List<dynamic>)
+            .map((e) => JourneyMetric.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+}

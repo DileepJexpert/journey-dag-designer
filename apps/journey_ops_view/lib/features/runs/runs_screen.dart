@@ -16,6 +16,7 @@ import '../../data/ops_api.dart';
 import '../../domain/triage.dart';
 import '../common/status_visuals.dart';
 import '../common/timestamp_text.dart';
+import '../metrics/metrics_screen.dart';
 import '../run_detail/run_detail_screen.dart';
 
 const pollInterval = Duration(seconds: 15);
@@ -197,6 +198,13 @@ class _RunsScreenState extends ConsumerState<RunsScreen> {
                 ),
               ),
             ),
+          IconButton(
+            icon: const Icon(Icons.bar_chart),
+            tooltip: 'Journey metrics',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const MetricsScreen()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh now',

@@ -46,6 +46,10 @@ class _OneRunApi implements OpsApi {
 
   @override
   Future<List<RunSummary>> search(String key) async => const [];
+
+  @override
+  Future<OpsMetrics> metrics() async =>
+      OpsMetrics(generatedAt: run.startedAt, journeys: const []);
 }
 
 Widget _app(Widget home, {OpsApi? api}) => ProviderScope(

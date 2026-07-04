@@ -72,6 +72,12 @@ class HttpOpsApi implements OpsApi {
     }
   }
 
+  @override
+  Future<OpsMetrics> metrics() async {
+    final res = await _get('/ops/metrics');
+    return OpsMetrics.fromJson(res.data as Map<String, dynamic>);
+  }
+
   Future<Response<dynamic>> _get(String path,
       {Map<String, String>? query}) async {
     try {

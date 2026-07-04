@@ -76,6 +76,60 @@ class MockOpsApi implements OpsApi {
     return null;
   }
 
+  @override
+  Future<OpsMetrics> metrics() async {
+    final byJourney = <String, List<RunDetail>>{};
+    for (final r in _runs) {
+      byJourney.putIfAbsent(r.journeyKey, () => <RunDetail>[]).add(r);
+    }
+    final dayAgo = _now.subtract(const Duration(hours: 24));
+    final journeys = <JourneyMetric>[];
+    byJourney.forEach((key, runs) {
+      var running = 0, approved = 0, declined = 0, failed = 0, last24h = 0;
+      final durations = <int>[];
+      for (final r in runs) {
+        final kind = r.status.kind;
+        if (kind == OpsStatusKind.running) {
+          running++;
+        } else if (kind == OpsStatusKind.completion) {
+          if (r.status == OpsStatus.completedApproved) {
+            approved++;
+          } else {
+            declined++;
+          }
+        } else {
+          failed++;
+        }
+        if (!r.startedAt.isBefore(dayAgo)) last24h++;
+        if (r.endedAt != null) {
+          final ms = r.endedAt!.difference(r.startedAt).inMilliseconds;
+          if (ms >= 0) durations.add(ms);
+        }
+      }
+      durations.sort();
+      journeys.add(JourneyMetric(
+        journeyKey: key,
+        total: runs.length,
+        running: running,
+        completedApproved: approved,
+        completedDeclined: declined,
+        failed: failed,
+        stuck: runs.where((r) => r.stuck).length,
+        startedLast24h: last24h,
+        p50Millis: _percentile(durations, 50),
+        p95Millis: _percentile(durations, 95),
+      ));
+    });
+    journeys.sort((a, b) => b.total.compareTo(a.total));
+    return OpsMetrics(generatedAt: _now, journeys: journeys);
+  }
+
+  static int? _percentile(List<int> ascending, int p) {
+    if (ascending.isEmpty) return null;
+    final rank = (p / 100 * ascending.length).ceil();
+    return ascending[(rank - 1).clamp(0, ascending.length - 1)];
+  }
+
   static int _newestFirst(RunSummary a, RunSummary b) {
     final byStart = b.startedAt.compareTo(a.startedAt);
     return byStart != 0 ? byStart : a.runId.compareTo(b.runId);

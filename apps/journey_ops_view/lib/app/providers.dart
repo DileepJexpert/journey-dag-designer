@@ -9,6 +9,7 @@ import '../data/graph_repository.dart';
 import '../data/http_ops_api.dart';
 import '../data/mock_ops_api.dart';
 import '../data/ops_api.dart';
+import '../domain/models.dart';
 import 'env.dart';
 
 /// Wall clock for the Tier-1 live computations (time-in-node, sweeper
@@ -44,3 +45,8 @@ final graphRepositoryProvider = Provider<GraphRepository>((ref) {
     ),
   );
 });
+
+/// GET /ops/metrics — per-journey aggregate. autoDispose so it re-fetches each
+/// time the metrics screen opens; invalidate to refresh.
+final metricsProvider = FutureProvider.autoDispose<OpsMetrics>(
+    (ref) => ref.watch(opsApiProvider).metrics());
