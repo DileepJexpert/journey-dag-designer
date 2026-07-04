@@ -4,6 +4,8 @@
 /// pointer for failed runs, and sibling runs that touched the same SFDC record.
 library;
 
+import 'dart:math' as math;
+
 import 'package:dag_core/dag_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -116,6 +118,8 @@ class _RunDetailBodyState extends ConsumerState<_RunDetailBody> {
                 pinned: pinned,
                 loading: loading,
                 error: snap.error),
+            const SizedBox(height: 10),
+            _GanttCard(run: run),
             const SizedBox(height: 10),
             _TimelineCard(run: run, graphNodeIds: graphNodeIds),
             const SizedBox(height: 10),
@@ -491,6 +495,179 @@ class _GraphCard extends StatelessWidget {
 }
 
 // ---- timeline ------------------------------------------------------------------
+
+// ---- gantt (Temporal-style duration bars) ----------------------------------
+
+/// A run's transitions collapsed to one span per node: first DISPATCH → the
+/// node's terminal (COMPLETED/FAILED), or open to endedAt/now while in-flight.
+class _NodeSpan {
+  _NodeSpan(this.nodeId, this.start, this.end, this.status);
+  final String nodeId;
+  final DateTime start;
+  final DateTime end;
+  final String status; // COMPLETED / FAILED / DISPATCHED (still running)
+  Duration get duration => end.difference(start);
+}
+
+List<_NodeSpan> _spansOf(List<TransitionEntry> transitions, DateTime fallbackEnd) {
+  final order = <String>[];
+  final start = <String, DateTime>{};
+  final end = <String, DateTime>{};
+  final status = <String, String>{};
+  for (final t in transitions) {
+    if (!start.containsKey(t.nodeId) && !end.containsKey(t.nodeId)) {
+      order.add(t.nodeId);
+    }
+    if (t.status == 'DISPATCHED') {
+      start.putIfAbsent(t.nodeId, () => t.at);
+    } else {
+      end[t.nodeId] = t.at;
+      status[t.nodeId] = t.status;
+      start.putIfAbsent(t.nodeId, () => t.at); // instant node (branch/terminal)
+    }
+  }
+  final spans = <_NodeSpan>[];
+  for (final id in order) {
+    final s = start[id]!;
+    var e = end[id] ?? fallbackEnd; // open bar for an in-flight node
+    if (e.isBefore(s)) e = s;
+    spans.add(_NodeSpan(id, s, e, status[id] ?? 'DISPATCHED'));
+  }
+  return spans;
+}
+
+/// Temporal-style timeline: one horizontal bar per node, positioned and scaled
+/// to the run's wall-clock window, so a slow node is obvious at a glance. Built
+/// from the SAME transitions the list below renders — no new data, read-only.
+class _GanttCard extends ConsumerWidget {
+  const _GanttCard({required this.run});
+  final RunDetail run;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final transitions = [...run.transitions]
+      ..sort((a, b) => a.seq.compareTo(b.seq));
+    final spans = transitions.isEmpty
+        ? const <_NodeSpan>[]
+        : _spansOf(transitions, run.endedAt ?? ref.read(nowProvider)());
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Timeline — durations',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            if (spans.isEmpty)
+              const Text('No transitions recorded yet.',
+                  style: TextStyle(fontSize: 12))
+            else
+              ..._bars(spans),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _bars(List<_NodeSpan> spans) {
+    final windowStart =
+        spans.map((s) => s.start).reduce((a, b) => a.isBefore(b) ? a : b);
+    var windowEnd =
+        spans.map((s) => s.end).reduce((a, b) => a.isAfter(b) ? a : b);
+    if (!windowEnd.isAfter(windowStart)) {
+      windowEnd = windowStart.add(const Duration(milliseconds: 1));
+    }
+    final spanMs = windowEnd.difference(windowStart).inMilliseconds;
+    return [
+      for (final s in spans)
+        _GanttRow(
+          span: s,
+          startFrac: s.start.difference(windowStart).inMilliseconds / spanMs,
+          durFrac: s.duration.inMilliseconds / spanMs,
+        ),
+      const SizedBox(height: 4),
+      Text('total ${formatDuration(windowEnd.difference(windowStart))}',
+          style: const TextStyle(fontSize: 10.5, color: Colors.white38)),
+    ];
+  }
+}
+
+class _GanttRow extends StatelessWidget {
+  const _GanttRow(
+      {required this.span, required this.startFrac, required this.durFrac});
+  final _NodeSpan span;
+  final double startFrac;
+  final double durFrac;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (span.status) {
+      'COMPLETED' => StatusVisuals.nodeCompleted,
+      'FAILED' => StatusVisuals.nodeFailed,
+      _ => StatusVisuals.nodeActive,
+    };
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.5),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 96,
+            child: Text(span.nodeId,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11.5)),
+          ),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, c) {
+                final double w = c.maxWidth;
+                final double df = durFrac.clamp(0.0, 1.0).toDouble();
+                final double sf = startFrac.clamp(0.0, 1.0).toDouble();
+                final double barW = math.max(3.0, df * w);
+                final double maxLeft = math.max(0.0, w - barW);
+                final double left = math.min(sf * w, maxLeft);
+                return SizedBox(
+                  height: 16,
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Colors.white10,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: left,
+                        top: 2,
+                        bottom: 2,
+                        width: barW,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.85),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 58,
+            child: Text(formatDuration(span.duration),
+                textAlign: TextAlign.right,
+                style: const TextStyle(fontSize: 10.5, color: Colors.white54)),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _TimelineCard extends StatelessWidget {
   const _TimelineCard({required this.run, required this.graphNodeIds});

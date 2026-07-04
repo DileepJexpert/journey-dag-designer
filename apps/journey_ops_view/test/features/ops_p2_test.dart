@@ -163,7 +163,8 @@ void main() {
           findsOneWidget);
       expect(find.textContaining('still undoing: n_customer'), findsOneWidget);
       expect(find.textContaining('decision already sent'), findsOneWidget);
-      expect(find.text('n_customer#comp'), findsOneWidget); // timeline row
+      expect(find.text('n_customer#comp'),
+          findsNWidgets(2)); // Gantt bar + timeline list row
       expect(find.text('failed · PERMANENT'), findsOneWidget); // canvas badge
       expect(find.text('PERMANENT'), findsOneWidget); // timeline FAILED row
     });
