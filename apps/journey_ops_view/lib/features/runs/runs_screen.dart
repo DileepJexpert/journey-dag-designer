@@ -66,6 +66,10 @@ class _RunsScreenState extends ConsumerState<RunsScreen> {
   /// if tile count grows; do not let the hack calcify).
   Map<RunsFilter, int>? _counts;
   String? _activeSearch;
+
+  /// Journey filter (null = all). Server-side via the runs() journeyKey param;
+  /// options come from the metrics endpoint's journey list.
+  String? _journeyKey;
   bool _loading = false;
   String? _refreshError;
   DateTime? _lastRefreshed;
@@ -103,14 +107,18 @@ class _RunsScreenState extends ConsumerState<RunsScreen> {
         // TRIAGE = the saved filter: both bands fetched wide (200 = the ops
         // API's max page — beyond that the floor is drowning anyway).
         final pending = await api.runs(
-            status: OpsStatus.failedNotifyPending, size: 200);
-        final stuck = await api.runs(stuckOnly: true, size: 200);
+            status: OpsStatus.failedNotifyPending,
+            journeyKey: _journeyKey,
+            size: 200);
+        final stuck =
+            await api.runs(stuckOnly: true, journeyKey: _journeyKey, size: 200);
         if (!mounted) return;
         setState(() => _triageResults = mergeTriage(
             notifyPending: pending.items, stuckRunning: stuck.items));
       } else {
         final data = await api.runs(
           status: _filter.status,
+          journeyKey: _journeyKey,
           stuckOnly: _filter == RunsFilter.stuck,
           page: _page,
           size: _pageSize,
@@ -118,7 +126,7 @@ class _RunsScreenState extends ConsumerState<RunsScreen> {
         if (!mounted) return;
         setState(() => _data = data);
       }
-      _counts = await _fetchCounts(api);
+      _counts = await _fetchCounts(api, _journeyKey);
       if (!mounted) return;
       _lastRefreshed = DateTime.now();
       _refreshError = null;
@@ -137,10 +145,16 @@ class _RunsScreenState extends ConsumerState<RunsScreen> {
     }
   }
 
-  /// One size-1 page per tile: totalItems is the count.
-  static Future<Map<RunsFilter, int>> _fetchCounts(OpsApi api) async {
+  /// One size-1 page per tile: totalItems is the count (scoped to the journey
+  /// filter when one is set).
+  static Future<Map<RunsFilter, int>> _fetchCounts(
+      OpsApi api, String? journeyKey) async {
     Future<int> count({OpsStatus? status, bool stuckOnly = false}) async =>
-        (await api.runs(status: status, stuckOnly: stuckOnly, size: 1))
+        (await api.runs(
+                status: status,
+                stuckOnly: stuckOnly,
+                journeyKey: journeyKey,
+                size: 1))
             .totalItems;
     return {
       RunsFilter.running: await count(status: OpsStatus.running),
@@ -159,6 +173,14 @@ class _RunsScreenState extends ConsumerState<RunsScreen> {
       _activeSearch = null;
       _searchController.clear();
       _searchResults = null;
+    });
+    _load();
+  }
+
+  void _setJourney(String? key) {
+    setState(() {
+      _journeyKey = key;
+      _page = 0;
     });
     _load();
   }
@@ -184,6 +206,13 @@ class _RunsScreenState extends ConsumerState<RunsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final journeyKeys = ref
+            .watch(metricsProvider)
+            .valueOrNull
+            ?.journeys
+            .map((j) => j.journeyKey)
+            .toList() ??
+        const <String>[];
     return Scaffold(
       appBar: AppBar(
         title: const Text('Journey Ops — runs'),
@@ -293,6 +322,40 @@ class _RunsScreenState extends ConsumerState<RunsScreen> {
                       visualDensity: VisualDensity.compact,
                     ),
                 ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: PopupMenuButton<String?>(
+                tooltip: 'Filter by journey',
+                onSelected: _setJourney,
+                itemBuilder: (context) => [
+                  const PopupMenuItem<String?>(
+                      value: null, child: Text('All journeys')),
+                  for (final k in journeyKeys)
+                    PopupMenuItem<String?>(value: k, child: Text(k)),
+                ],
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.filter_list, size: 15),
+                      const SizedBox(width: 6),
+                      Text('Journey: ${_journeyKey ?? 'all'}',
+                          style: const TextStyle(fontSize: 12)),
+                      const Icon(Icons.arrow_drop_down, size: 18),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
