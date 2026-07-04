@@ -22,11 +22,12 @@ class Env {
     defaultValue: 'dev-registry-token',
   );
 
-  /// Default ON so the app (and widget tests) run without the backend.
-  /// Run against the real registry with:
-  ///   flutter run --dart-define=USE_MOCK_BACKEND=false
+  /// Default OFF: the app talks to the REAL journey-registry (all services
+  /// connected). Widget tests inject the in-memory mock via provider overrides,
+  /// so they are unaffected by this default. For a quick backend-free run:
+  ///   flutter run --dart-define=USE_MOCK_BACKEND=true
   static const bool useMockBackend = bool.fromEnvironment(
     'USE_MOCK_BACKEND',
-    defaultValue: true,
+    defaultValue: false,
   );
 }

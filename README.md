@@ -30,11 +30,13 @@ the *same* models, serializer and canvas the Designer authors with — one
 schema, one drawing surface. It declares `flutter: >=3.22` and deliberately
 uses only version-stable framework APIs.
 
-The ops view boots against seeded mocks by default; run it live with:
+The ops view boots against the REAL engine `/ops` by default (all services
+connected); the dart-defines below only override the non-default URLs/token.
+For a quick backend-free run, pass `--dart-define=USE_MOCK_OPS_API=true`.
 
 ```bash
 cd apps/journey_ops_view
-flutter run -d chrome --dart-define=USE_MOCK_OPS_API=false \
+flutter run -d chrome \
   --dart-define=OPS_API_BASE_URL=http://localhost:8082 \
   --dart-define=OPS_TOKEN=dev-ops-token \
   --dart-define=REGISTRY_BASE_URL=http://localhost:8104 \
@@ -58,7 +60,9 @@ full editor (canvas, palette, inspector, validation panel, config preview),
 versioning + maker-checker approval flows, and a live `HttpJourneyRepository`
 against the platform repo's journey-registry (server-enforced 403s surface in
 the UI; real logged-in actor on every write). `Env.useMockBackend` switches the
-whole data layer between seeded mocks and the live registry.
+whole data layer between seeded mocks and the live registry — it now defaults to
+the **live registry** (all services connected); pass `USE_MOCK_BACKEND=true` for
+a seeded, backend-free run.
 
 ## Frontend ↔ backend alignment notes
 
@@ -84,7 +88,16 @@ cd apps/journey_dag_designer
 flutter pub get
 dart run build_runner build --delete-conflicting-outputs   # generated files are committed; only needed after model changes
 flutter test            # full designer suite
-flutter run -d chrome   # boots in mock mode (USE_MOCK_BACKEND defaults true)
+flutter run -d chrome   # LIVE by default: talks to the journey-registry on :8104
+```
+
+A bare `flutter run` now targets the **real** journey-registry at its local
+defaults (`API_BASE_URL=http://localhost:8104`, `REGISTRY_TOKEN=dev-registry-token`)
+— start the platform stack first (`idfc-integration-platform/run-services.sh`,
+which self-seeds the canonical journeys). For a seeded, backend-free run:
+
+```bash
+flutter run -d chrome --dart-define=USE_MOCK_BACKEND=true
 ```
 
 The shared package has its own (contract-lock) suite:
@@ -94,18 +107,9 @@ cd packages/dag_core
 flutter test
 ```
 
-Against the LIVE journey-registry (the platform repo's
-`docs/testing/REGISTRY_RUNBOOK.md` operates the whole seam):
-
-```bash
-cd apps/journey_dag_designer
-flutter run -d chrome --dart-define=USE_MOCK_BACKEND=false \
-  --dart-define=API_BASE_URL=http://localhost:8104 \
-  --dart-define=REGISTRY_TOKEN=dev-registry-token
-```
-
 `test/integration/registry_live_test.dart` runs the full maker-checker
-lifecycle over real HTTP and self-skips when the registry isn't running.
+lifecycle over real HTTP and self-skips when the registry isn't running. The
+platform repo's `docs/testing/REGISTRY_RUNBOOK.md` operates the whole seam.
 
 > Toolchain note: `flutter analyze` on an SDK older than ~3.27 reports a
 > handful of `withValues`/`initialValue`/`CardThemeData` errors in Designer

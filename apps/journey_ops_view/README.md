@@ -72,13 +72,13 @@ a distinct journey-key endpoint (derive client-side).
 ## Running it
 
 ```sh
-flutter run -d chrome                         # mock mode: seeded fixtures, no backend
+# LIVE by default: reads the engine's audited /ops window (all services connected).
 flutter run -d chrome \
-  --dart-define=USE_MOCK_OPS_API=false \
   --dart-define=OPS_API_BASE_URL=http://localhost:8082 \
-  --dart-define=OPS_TOKEN=... \
+  --dart-define=OPS_TOKEN=dev-ops-token \
   --dart-define=REGISTRY_BASE_URL=http://localhost:8104 \
-  --dart-define=REGISTRY_TOKEN=... \
-  --dart-define=OPS_USER=ops.analyst1         # real audited window
+  --dart-define=REGISTRY_TOKEN=dev-registry-token \
+  --dart-define=OPS_USER=ops.analyst1         # skip the identity gate
+flutter run -d chrome --dart-define=USE_MOCK_OPS_API=true   # seeded fixtures, no backend
 flutter test                                  # the behavior suite
 ```

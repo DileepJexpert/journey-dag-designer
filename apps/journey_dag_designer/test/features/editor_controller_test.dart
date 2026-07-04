@@ -9,8 +9,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:journey_dag_designer/app/providers.dart';
 import 'package:dag_core/dag_core.dart';
+import 'package:journey_dag_designer/data/repositories/mock_journey_repository.dart';
 import 'package:journey_dag_designer/domain/models/journey.dart';
 import 'package:journey_dag_designer/features/editor/editor_controller.dart';
+
+/// The app now defaults to the REAL registry (`Env.useMockBackend` is false), so
+/// a test MUST inject the seeded in-memory mock explicitly — this is the exact
+/// binding `providers.dart` uses in its mock branch, so the controller behaves
+/// identically to a mock-default run, minus any dependency on a live backend.
+ProviderContainer _mockContainer() => ProviderContainer(overrides: [
+      journeyRepositoryProvider.overrideWith(
+          (ref) => MockJourneyRepository(actor: ref.watch(currentActorProvider))),
+    ]);
 
 Future<EditorState> _settled(
   ProviderContainer container,
@@ -26,7 +36,7 @@ Future<EditorState> _settled(
 void main() {
   test('maker forks a draft, authors a node, and submits a valid journey',
       () async {
-    final container = ProviderContainer();
+    final container = _mockContainer();
     addTearDown(container.dispose);
 
     final provider = editorControllerProvider('jr_loan');
@@ -67,7 +77,7 @@ void main() {
 
   test('a freshly created empty draft fails validation, then accepts authoring',
       () async {
-    final container = ProviderContainer();
+    final container = _mockContainer();
     addTearDown(container.dispose);
 
     // Same path the New Journey dialog uses: create journey + empty draft.

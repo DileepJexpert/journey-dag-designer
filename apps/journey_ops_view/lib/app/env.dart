@@ -44,11 +44,12 @@ class OpsEnv {
     defaultValue: '',
   );
 
-  /// Default ON so the app (and widget tests) run without the backend.
-  /// Run against the real ops API with:
-  ///   flutter run --dart-define=USE_MOCK_OPS_API=false
+  /// Default OFF: the app reads the REAL engine ops API (`/ops` on the engine).
+  /// Widget tests inject the seeded [MockOpsApi] via provider overrides, so they
+  /// are unaffected by this default. For a quick backend-free run:
+  ///   flutter run --dart-define=USE_MOCK_OPS_API=true
   static const bool useMockOpsApi = bool.fromEnvironment(
     'USE_MOCK_OPS_API',
-    defaultValue: true,
+    defaultValue: false,
   );
 }

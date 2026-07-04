@@ -1,17 +1,27 @@
 /// The acceptance walk's first step (spec E): open the app, assert who you
-/// are, land on the runs list — in mock mode with NO provider overrides, i.e.
-/// exactly what `flutter run` boots.
+/// are, land on the runs list. The app now defaults to the REAL engine ops API
+/// (`OpsEnv.useMockOpsApi` is false), so this pumps the whole [OpsApp] with the
+/// seeded mock injected — the identity-gate → runs-list flow, backend-free.
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:journey_ops_view/app/app.dart';
+import 'package:journey_ops_view/app/providers.dart';
+import 'package:journey_ops_view/data/graph_repository.dart';
+import 'package:journey_ops_view/data/mock_ops_api.dart';
 
 void main() {
-  testWidgets('identity gate -> runs list, wired end-to-end in mock mode',
+  testWidgets('identity gate -> runs list, wired end-to-end against the seeded mock',
       (tester) async {
-    await tester.pumpWidget(const ProviderScope(child: OpsApp()));
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        opsApiProvider.overrideWithValue(MockOpsApi()),
+        graphRepositoryProvider.overrideWithValue(MockGraphRepository()),
+      ],
+      child: const OpsApp(),
+    ));
     await tester.pumpAndSettle();
 
     // Gated until an operator id is asserted.
