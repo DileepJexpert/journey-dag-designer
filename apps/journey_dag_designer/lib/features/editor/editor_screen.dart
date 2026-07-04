@@ -22,12 +22,23 @@ import 'widgets/node_inspector.dart';
 import 'widgets/palette.dart';
 import 'widgets/validation_panel.dart';
 
-class EditorScreen extends ConsumerWidget {
+class EditorScreen extends ConsumerStatefulWidget {
   const EditorScreen({super.key, required this.journeyId});
   final String journeyId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<EditorScreen> createState() => _EditorScreenState();
+}
+
+class _EditorScreenState extends ConsumerState<EditorScreen> {
+  // Either rail can retract to a slim strip so the canvas takes the full width
+  // (a wide graph needs the room); the toggle lives on each rail's inner edge.
+  bool _leftCollapsed = false;
+  bool _rightCollapsed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final journeyId = widget.journeyId;
     final provider = editorControllerProvider(journeyId);
     final state = ref.watch(provider);
 
@@ -87,12 +98,13 @@ class EditorScreen extends ConsumerWidget {
       ),
       body: Row(
         children: [
-          SizedBox(
+          _SidePanel(
+            side: _PanelSide.left,
+            label: 'Palette',
             width: 220,
-            child: Material(
-              color: const Color(0xFF15191F),
-              child: Palette(journeyId: journeyId),
-            ),
+            collapsed: _leftCollapsed,
+            onToggle: () => setState(() => _leftCollapsed = !_leftCollapsed),
+            child: Palette(journeyId: journeyId),
           ),
           const VerticalDivider(width: 1),
           Expanded(
@@ -102,14 +114,99 @@ class EditorScreen extends ConsumerWidget {
             ),
           ),
           const VerticalDivider(width: 1),
-          SizedBox(
+          _SidePanel(
+            side: _PanelSide.right,
+            label: 'Inspector',
             width: 340,
-            child: Material(
-              color: const Color(0xFF15191F),
-              child: _RightRail(journeyId: journeyId),
-            ),
+            collapsed: _rightCollapsed,
+            onToggle: () => setState(() => _rightCollapsed = !_rightCollapsed),
+            child: _RightRail(journeyId: journeyId),
           ),
         ],
+      ),
+    );
+  }
+}
+
+enum _PanelSide { left, right }
+
+/// A collapsible editor side rail. Expanded, it's a fixed-width panel whose
+/// content scrolls on its own; collapsed, it becomes a slim strip with an
+/// expand handle so the canvas can claim the full width for a wide graph. The
+/// toggle sits on the inner (canvas-facing) edge of the rail.
+class _SidePanel extends StatelessWidget {
+  const _SidePanel({
+    required this.side,
+    required this.label,
+    required this.width,
+    required this.collapsed,
+    required this.onToggle,
+    required this.child,
+  });
+
+  final _PanelSide side;
+  final String label;
+  final double width;
+  final bool collapsed;
+  final VoidCallback onToggle;
+  final Widget child;
+
+  static const Color _bg = Color(0xFF15191F);
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isLeft = side == _PanelSide.left;
+    if (collapsed) {
+      return Material(
+        color: _bg,
+        child: SizedBox(
+          width: 40,
+          child: Column(
+            children: [
+              const SizedBox(height: 4),
+              IconButton(
+                tooltip: 'Show $label',
+                icon: Icon(isLeft ? Icons.chevron_right : Icons.chevron_left),
+                onPressed: onToggle,
+              ),
+              const SizedBox(height: 6),
+              RotatedBox(
+                quarterTurns: isLeft ? 3 : 1,
+                child: Text(
+                  label.toUpperCase(),
+                  style: const TextStyle(
+                      fontSize: 11, letterSpacing: 1.1, color: Colors.white54),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return SizedBox(
+      width: width,
+      child: Material(
+        color: _bg,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              height: 32,
+              child: Align(
+                alignment:
+                    isLeft ? Alignment.centerRight : Alignment.centerLeft,
+                child: IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Hide $label',
+                  icon: Icon(isLeft ? Icons.chevron_left : Icons.chevron_right,
+                      size: 20),
+                  onPressed: onToggle,
+                ),
+              ),
+            ),
+            Expanded(child: child),
+          ],
+        ),
       ),
     );
   }
