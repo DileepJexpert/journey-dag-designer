@@ -7,8 +7,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/graph_repository.dart';
 import '../data/http_ops_api.dart';
+import '../data/http_sync_ops_api.dart';
 import '../data/mock_ops_api.dart';
+import '../data/mock_sync_ops_api.dart';
 import '../data/ops_api.dart';
+import '../data/sync_ops_api.dart';
 import '../domain/models.dart';
 import 'env.dart';
 
@@ -28,6 +31,19 @@ final opsApiProvider = Provider<OpsApi>((ref) {
   }
   return HttpOpsApi(
     baseUrl: OpsEnv.opsApiBaseUrl,
+    opsToken: OpsEnv.opsToken,
+    actorId: () => ref.read(opsActorProvider) ?? 'unidentified',
+  );
+});
+
+/// The sync-lane audit API (digital edge :8081). Distinct from [opsApiProvider]
+/// (engine :8082) because sync invocations are not journeys and live on the edge.
+final syncOpsApiProvider = Provider<SyncOpsApi>((ref) {
+  if (OpsEnv.useMockOpsApi) {
+    return MockSyncOpsApi();
+  }
+  return HttpSyncOpsApi(
+    baseUrl: OpsEnv.syncApiBaseUrl,
     opsToken: OpsEnv.opsToken,
     actorId: () => ref.read(opsActorProvider) ?? 'unidentified',
   );

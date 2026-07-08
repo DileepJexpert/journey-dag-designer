@@ -18,6 +18,7 @@ import '../common/status_visuals.dart';
 import '../common/timestamp_text.dart';
 import '../metrics/metrics_screen.dart';
 import '../run_detail/run_detail_screen.dart';
+import '../sync_invocations/sync_invocations_screen.dart';
 
 const pollInterval = Duration(seconds: 15);
 const pollBackoffCap = Duration(seconds: 120);
@@ -227,6 +228,14 @@ class _RunsScreenState extends ConsumerState<RunsScreen> {
                 ),
               ),
             ),
+          IconButton(
+            icon: const Icon(Icons.bolt),
+            tooltip: 'Sync invocations (in-thread calls, not journeys)',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                  builder: (_) => const SyncInvocationsScreen()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.bar_chart),
             tooltip: 'Journey metrics',
