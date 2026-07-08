@@ -14,6 +14,15 @@ class OpsEnv {
     defaultValue: 'http://localhost:8082',
   );
 
+  /// The DIGITAL EDGE's sync-invocation audit surface. The sync lane
+  /// (imps-disbursal, lms-utilities) runs IN-THREAD on the edge (:8081), not the
+  /// engine — so its `/ops/sync-invocations` records live here, not on the engine
+  /// port. Same X-Ops-Token as the engine ops API (one ops token, both surfaces).
+  static const String syncApiBaseUrl = String.fromEnvironment(
+    'SYNC_OPS_API_BASE_URL',
+    defaultValue: 'http://localhost:8081',
+  );
+
   /// The ops API token (X-Ops-Token). DEV default matches the engine's local
   /// profile; real deployments pass their secret at build time. (The engine
   /// fails closed at startup without a configured token — a client-side dev
